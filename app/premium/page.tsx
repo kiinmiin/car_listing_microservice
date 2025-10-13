@@ -7,12 +7,23 @@ import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Crown, Check, Star, TrendingUp, Eye, Zap, Shield, CreditCard, Lock, ArrowRight } from "lucide-react"
+import { Crown, Check, TrendingUp, Eye, Zap, Shield, CreditCard, Lock, ArrowRight } from "lucide-react"
 import Link from "next/link"
+import { Header } from '@/components/header'
+import { api } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
+import { useRouter } from 'next/navigation'
 
 export default function PremiumPage() {
   const [selectedPlan, setSelectedPlan] = useState("premium")
   const [showPayment, setShowPayment] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const { user } = useAuth()
+  const router = useRouter()
+
+  // Check if user already has premium subscription
+  const isPremiumUser = user?.subscription === 'premium'
+  const isFreeUser = user?.subscription === 'free'
 
   const plans = [
     {
@@ -70,44 +81,45 @@ export default function PremiumPage() {
     },
   ]
 
-  const handleUpgrade = () => {
-    setShowPayment(true)
+  const handleUpgrade = async () => {
+    if (!user) {
+      router.push('/auth/login?redirect=/premium')
+      return
+    }
+
+    if (isPremiumUser) {
+      // User already has premium, redirect to dashboard
+      router.push('/dashboard')
+      return
+    }
+
+    if (selectedPlan === "basic") {
+      return
+    }
+
+    setLoading(true)
+    try {
+      // For now, we'll use a dummy listing ID since we don't have a specific listing
+      // In a real app, you'd either create a listing first or handle this differently
+      const dummyListingId = "premium-upgrade-" + Date.now()
+      
+      const priceCents = selectedPlan === "premium" ? 2999 : 4999 // $29.99 or $49.99
+      
+      const { url } = await api.createCheckoutSession(dummyListingId, priceCents, 'usd')
+      
+      // Redirect to Stripe Checkout
+      window.location.href = url
+    } catch (error) {
+      console.error('Error creating checkout session:', error)
+      alert('Error processing payment. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Link href="/" className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <span className="text-primary-foreground font-bold text-lg">C</span>
-                </div>
-                <span className="text-xl font-bold text-foreground">CarMarket</span>
-              </Link>
-            </div>
-            <nav className="hidden md:flex items-center space-x-6">
-              <Link href="/browse" className="text-foreground hover:text-primary transition-colors">
-                Browse Cars
-              </Link>
-              <Link href="/sell" className="text-foreground hover:text-primary transition-colors">
-                Sell Your Car
-              </Link>
-              <Link href="/premium" className="text-accent font-medium">
-                Premium Listings
-              </Link>
-            </nav>
-            <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm">
-                Sign In
-              </Button>
-              <Button size="sm">Get Started</Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header currentPage="premium" />
 
       <div className="container mx-auto px-4 py-12">
         {!showPayment ? (
@@ -122,6 +134,21 @@ export default function PremiumPage() {
                 Get your car noticed by thousands more buyers with premium placement, enhanced visibility, and
                 professional features that sell cars 3x faster.
               </p>
+              
+              {/* Premium User Status */}
+              {isPremiumUser && (
+                <div className="mt-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 max-w-md mx-auto">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Crown className="w-5 h-5 text-green-600" />
+                    <span className="font-semibold text-green-800 dark:text-green-200">
+                      Premium Member
+                    </span>
+                  </div>
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    You have {user?.premiumListingsRemaining || 0} premium listings remaining
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Benefits Section */}
@@ -198,8 +225,16 @@ export default function PremiumPage() {
                         className="w-full"
                         variant={selectedPlan === plan.id ? "default" : "outline"}
                         onClick={() => setSelectedPlan(plan.id)}
+                        disabled={
+                          (isPremiumUser && plan.id === 'basic') ||
+                          (isPremiumUser && plan.id === 'premium') ||
+                          (isPremiumUser && plan.id === 'spotlight')
+                        }
                       >
-                        {selectedPlan === plan.id ? "Selected" : "Select Plan"}
+                        {isPremiumUser && plan.id === 'premium' ? "Current Plan" :
+                         isPremiumUser && plan.id === 'spotlight' ? "Upgrade Available" :
+                         isPremiumUser && plan.id === 'basic' ? "Downgrade" :
+                         selectedPlan === plan.id ? "Selected" : "Select Plan"}
                       </Button>
                     </CardContent>
                   </Card>
@@ -249,15 +284,45 @@ export default function PremiumPage() {
 
             {/* CTA Section */}
             <div className="text-center">
-              <Button size="lg" onClick={handleUpgrade} disabled={selectedPlan === "basic"}>
-                {selectedPlan === "basic"
-                  ? "Free Plan Selected"
-                  : `Upgrade to ${plans.find((p) => p.id === selectedPlan)?.name}`}
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-              <p className="text-sm text-muted-foreground mt-2">
-                Secure payment powered by Stripe • 30-day money-back guarantee
-              </p>
+              {isPremiumUser ? (
+                <div className="space-y-4">
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <Crown className="w-5 h-5 text-green-600" />
+                      <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
+                        You're already a Premium member!
+                      </h3>
+                    </div>
+                    <p className="text-green-700 dark:text-green-300 mb-4">
+                      You have {user?.premiumListingsRemaining || 0} premium listings remaining
+                    </p>
+                    <Button asChild>
+                      <Link href="/dashboard">
+                        Go to Dashboard
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Button size="lg" onClick={handleUpgrade} disabled={selectedPlan === "basic" || loading}>
+                    {loading ? (
+                      "Processing..."
+                    ) : selectedPlan === "basic" ? (
+                      "Free Plan Selected"
+                    ) : (
+                      <>
+                        Upgrade to {plans.find((p) => p.id === selectedPlan)?.name}
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Secure payment powered by Stripe • 30-day money-back guarantee
+                  </p>
+                </>
+              )}
             </div>
           </>
         ) : (
@@ -370,58 +435,6 @@ export default function PremiumPage() {
           </div>
         )}
 
-        {/* Testimonials */}
-        {!showPayment && (
-          <div className="max-w-4xl mx-auto mt-16">
-            <h3 className="text-2xl font-bold text-center text-foreground mb-8">What Our Sellers Say</h3>
-            <div className="grid md:grid-cols-2 gap-8">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-1 mb-3">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="w-4 h-4 fill-accent text-accent" />
-                    ))}
-                  </div>
-                  <p className="text-muted-foreground mb-4">
-                    "My premium listing got 5x more views than my previous standard listing. Sold my BMW in just 3
-                    days!"
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-medium">JS</span>
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">John Smith</p>
-                      <p className="text-xs text-muted-foreground">Sold 2023 BMW 3 Series</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-1 mb-3">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="w-4 h-4 fill-accent text-accent" />
-                    ))}
-                  </div>
-                  <p className="text-muted-foreground mb-4">
-                    "The spotlight listing was worth every penny. Featured on the homepage and sold within a week!"
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-medium">MJ</span>
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">Maria Johnson</p>
-                      <p className="text-xs text-muted-foreground">Sold 2024 Tesla Model S</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

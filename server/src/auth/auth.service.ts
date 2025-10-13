@@ -7,12 +7,20 @@ import { JwtService } from '@nestjs/jwt';
 export class AuthService {
   constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
 
-  async register(params: { email: string; password: string; name?: string }): Promise<{ token: string }>
+  async register(params: { email: string; password: string; name: string }): Promise<{ token: string }>
   {
     const exists = await this.prisma.user.findUnique({ where: { email: params.email } });
     if (exists) throw new BadRequestException('Email already in use');
     const passwordHash = await argon2.hash(params.password);
-    const user = await this.prisma.user.create({ data: { email: params.email, passwordHash, name: params.name ?? null } });
+    const user = await this.prisma.user.create({ 
+      data: { 
+        email: params.email, 
+        passwordHash, 
+        name: params.name,
+        subscription: 'free',
+        premiumListingsRemaining: 0
+      } 
+    });
     const token = await this.signToken(user.id);
     return { token };
   }
@@ -25,6 +33,41 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException('Invalid credentials');
     const token = await this.signToken(user.id);
     return { token };
+  }
+
+  async getUserById(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+    return user;
+  }
+
+  async updateProfile(userId: string, data: { name?: string; email?: string }) {
+    const updateData: any = {};
+    
+    if (data.name !== undefined) {
+      updateData.name = data.name;
+    }
+    
+    if (data.email !== undefined) {
+      // Check if email is already taken by another user
+      const existingUser = await this.prisma.user.findFirst({
+        where: { 
+          email: data.email,
+          id: { not: userId }
+        }
+      });
+      
+      if (existingUser) {
+        throw new Error('Email already in use');
+      }
+      
+      updateData.email = data.email;
+    }
+    
+    return await this.prisma.user.update({
+      where: { id: userId },
+      data: updateData
+    });
   }
 
   private async signToken(userId: string): Promise<string> {

@@ -1,43 +1,72 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search, Star, MapPin, Calendar, Fuel, Settings, Crown } from "lucide-react"
+import { Search, MapPin, Calendar, Fuel, Settings, Crown } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from '@/lib/auth-context'
+import { api, Listing } from '@/lib/api'
+import { Header } from '@/components/header'
 
 export default function HomePage() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
+  const [regularListings, setRegularListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    fetchListings();
+  }, []);
+
+  const fetchListings = async () => {
+    try {
+      const [featuredResponse, regularResponse] = await Promise.all([
+        api.getListings({ featured: true, limit: 3 }),
+        api.getListings({ featured: false, limit: 10 }) // Get more to filter out sold ones
+      ]);
+      
+      // Filter out sold listings
+      const activeFeatured = featuredResponse.items.filter(listing => !listing.title.includes('SOLD'));
+      const activeRegular = regularResponse.items.filter(listing => !listing.title.includes('SOLD'));
+      
+      setFeaturedListings(activeFeatured);
+      setRegularListings(activeRegular.slice(0, 4)); // Take first 4 active regular listings
+    } catch (error) {
+      console.error('Error fetching listings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      window.location.href = `/browse?q=${encodeURIComponent(searchQuery)}`;
+    } else {
+      window.location.href = '/browse';
+    }
+  };
+
+  const formatPrice = (price: number, currency: string) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+    }).format(price / 100);
+  };
+
+  const getImageUrl = (images: string[], make: string, model: string, year: number) => {
+    if (images.length > 0) {
+      return `/abstract-geometric-shapes.png?height=200&width=350&query=${year} ${make} ${model}`;
+    }
+    return `/abstract-geometric-shapes.png?height=200&width=350&query=${year} ${make} ${model}`;
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-lg">C</span>
-              </div>
-              <span className="text-xl font-bold text-foreground">CarMarket</span>
-            </div>
-            <nav className="hidden md:flex items-center space-x-6">
-              <Link href="/browse" className="text-foreground hover:text-primary transition-colors">
-                Browse Cars
-              </Link>
-              <Link href="/sell" className="text-foreground hover:text-primary transition-colors">
-                Sell Your Car
-              </Link>
-              <Link href="/premium" className="text-accent hover:text-accent/80 transition-colors font-medium">
-                Premium Listings
-              </Link>
-            </nav>
-            <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm">
-                Sign In
-              </Button>
-              <Button size="sm">Get Started</Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header currentPage="home" />
 
       {/* Hero Section */}
       <section className="relative py-20 bg-gradient-to-br from-card via-background to-muted">
@@ -60,13 +89,18 @@ export default function HomePage() {
                   <Input
                     placeholder="Search by make, model, or keyword..."
                     className="pl-10 border-0 bg-transparent focus-visible:ring-0"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    Filters
-                  </Button>
-                  <Button size="sm" className="px-8">
+                  <Link href="/browse">
+                    <Button variant="outline" size="sm">
+                      Filters
+                    </Button>
+                  </Link>
+                  <Button size="sm" className="px-8" onClick={handleSearch}>
                     Search
                   </Button>
                 </div>
@@ -113,148 +147,81 @@ export default function HomePage() {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {/* Premium Car Card 1 */}
-            <Card className="overflow-hidden hover:shadow-lg transition-shadow border-accent/20">
-              <div className="relative">
-                <img src="/luxury-red-bmw-sedan-front-view.jpg" alt="2023 BMW 3 Series" className="w-full h-48 object-cover" />
-                <Badge className="absolute top-3 left-3 bg-accent text-accent-foreground">
-                  <Crown className="w-3 h-3 mr-1" />
-                  Premium
-                </Badge>
-                <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
-                  $45,999
-                </div>
+            {loading ? (
+              // Loading skeleton
+              [...Array(3)].map((_, i) => (
+                <Card key={i} className="overflow-hidden">
+                  <div className="h-48 bg-muted animate-pulse" />
+                  <CardHeader>
+                    <div className="h-4 bg-muted rounded animate-pulse" />
+                    <div className="h-3 bg-muted rounded animate-pulse w-2/3" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-3 bg-muted rounded animate-pulse" />
+                  </CardContent>
+                </Card>
+              ))
+            ) : featuredListings.length > 0 ? (
+              featuredListings.map((listing) => (
+                <Card key={listing.id} className="overflow-hidden hover:shadow-lg transition-shadow border-accent/20">
+                  <div className="relative">
+                    <img 
+                      src={getImageUrl(listing.images, listing.make, listing.model, listing.year)} 
+                      alt={`${listing.year} ${listing.make} ${listing.model}`} 
+                      className="w-full h-48 object-cover" 
+                    />
+                    <Badge className="absolute top-3 left-3 bg-accent text-accent-foreground">
+                      <Crown className="w-3 h-3 mr-1" />
+                      Premium
+                    </Badge>
+                    <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
+                      {formatPrice(listing.price, listing.currency)}
+                    </div>
+                  </div>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">
+                      <Link href={`/car/${listing.id}`} className="hover:text-primary transition-colors">
+                        {listing.year} {listing.make} {listing.model}
+                      </Link>
+                    </CardTitle>
+                    <CardDescription className="flex items-center gap-4 text-sm">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        {listing.year}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Settings className="w-4 h-4" />
+                        {listing.mileage.toLocaleString()} miles
+                      </span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        <MapPin className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">{listing.location}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-8 text-muted-foreground">
+                No premium listings available
               </div>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">2023 BMW 3 Series</CardTitle>
-                <CardDescription className="flex items-center gap-4 text-sm">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    2023
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Settings className="w-4 h-4" />
-                    15K miles
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Fuel className="w-4 h-4" />
-                    Gas
-                  </span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Los Angeles, CA</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Star className="w-4 h-4 fill-accent text-accent" />
-                    <span className="text-sm font-medium">4.9</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Premium Car Card 2 */}
-            <Card className="overflow-hidden hover:shadow-lg transition-shadow border-accent/20">
-              <div className="relative">
-                <img src="/white-tesla-model-s-electric-car.jpg" alt="2024 Tesla Model S" className="w-full h-48 object-cover" />
-                <Badge className="absolute top-3 left-3 bg-accent text-accent-foreground">
-                  <Crown className="w-3 h-3 mr-1" />
-                  Premium
-                </Badge>
-                <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
-                  $89,999
-                </div>
-              </div>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">2024 Tesla Model S</CardTitle>
-                <CardDescription className="flex items-center gap-4 text-sm">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    2024
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Settings className="w-4 h-4" />
-                    5K miles
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Fuel className="w-4 h-4" />
-                    Electric
-                  </span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">San Francisco, CA</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Star className="w-4 h-4 fill-accent text-accent" />
-                    <span className="text-sm font-medium">5.0</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Premium Car Card 3 */}
-            <Card className="overflow-hidden hover:shadow-lg transition-shadow border-accent/20">
-              <div className="relative">
-                <img
-                  src="/black-mercedes-benz-c-class-luxury-sedan.jpg"
-                  alt="2023 Mercedes-Benz C-Class"
-                  className="w-full h-48 object-cover"
-                />
-                <Badge className="absolute top-3 left-3 bg-accent text-accent-foreground">
-                  <Crown className="w-3 h-3 mr-1" />
-                  Premium
-                </Badge>
-                <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
-                  $52,999
-                </div>
-              </div>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">2023 Mercedes-Benz C-Class</CardTitle>
-                <CardDescription className="flex items-center gap-4 text-sm">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    2023
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Settings className="w-4 h-4" />
-                    12K miles
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Fuel className="w-4 h-4" />
-                    Gas
-                  </span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Miami, FL</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Star className="w-4 h-4 fill-accent text-accent" />
-                    <span className="text-sm font-medium">4.8</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            )}
           </div>
 
           <div className="text-center">
-            <Button
-              size="lg"
-              variant="outline"
-              className="border-accent text-accent hover:bg-accent hover:text-accent-foreground bg-transparent"
-            >
-              View All Premium Listings
-            </Button>
+            <Link href="/browse?featured=true">
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-accent text-accent hover:bg-accent hover:text-accent-foreground bg-transparent"
+              >
+                View All Premium Listings
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -271,92 +238,74 @@ export default function HomePage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Regular Car Cards */}
-            {[
-              {
-                make: "Honda",
-                model: "Civic",
-                year: "2022",
-                price: "$24,999",
-                miles: "28K",
-                location: "Austin, TX",
-                rating: "4.7",
-                image: "silver Honda Civic compact car",
-              },
-              {
-                make: "Toyota",
-                model: "Camry",
-                year: "2023",
-                price: "$29,999",
-                miles: "18K",
-                location: "Phoenix, AZ",
-                rating: "4.8",
-                image: "white Toyota Camry sedan",
-              },
-              {
-                make: "Ford",
-                model: "F-150",
-                year: "2021",
-                price: "$42,999",
-                miles: "35K",
-                location: "Dallas, TX",
-                rating: "4.6",
-                image: "blue Ford F-150 pickup truck",
-              },
-              {
-                make: "Nissan",
-                model: "Altima",
-                year: "2022",
-                price: "$26,999",
-                miles: "22K",
-                location: "Orlando, FL",
-                rating: "4.5",
-                image: "gray Nissan Altima sedan",
-              },
-            ].map((car, index) => (
-              <Card key={index} className="overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="relative">
-                  <img
-                    src={`/abstract-geometric-shapes.png?height=160&width=300&query=${car.image}`}
-                    alt={`${car.year} ${car.make} ${car.model}`}
-                    className="w-full h-40 object-cover"
-                  />
-                  <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
-                    {car.price}
-                  </div>
-                </div>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">
-                    {car.year} {car.make} {car.model}
-                  </CardTitle>
-                  <CardDescription className="flex items-center gap-3 text-xs">
-                    <span className="flex items-center gap-1">
-                      <Settings className="w-3 h-3" />
-                      {car.miles} miles
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Fuel className="w-3 h-3" />
-                      Gas
-                    </span>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-muted-foreground" />
-                      <span className="text-muted-foreground">{car.location}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Star className="w-3 h-3 fill-accent text-accent" />
-                      <span className="font-medium">{car.rating}</span>
+            {loading ? (
+              // Loading skeleton
+              [...Array(4)].map((_, index) => (
+                <Card key={index} className="overflow-hidden">
+                  <div className="w-full h-40 bg-muted animate-pulse" />
+                  <CardHeader className="pb-2">
+                    <div className="h-4 bg-muted rounded animate-pulse mb-2" />
+                    <div className="h-3 bg-muted rounded animate-pulse w-3/4" />
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
+                  </CardContent>
+                </Card>
+              ))
+            ) : regularListings.length > 0 ? (
+              regularListings.map((listing) => (
+                <Card key={listing.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                  <div className="relative">
+                    <img
+                      src={getImageUrl(listing.images, listing.make, listing.model, listing.year)}
+                      alt={`${listing.year} ${listing.make} ${listing.model}`}
+                      className="w-full h-40 object-cover"
+                    />
+                    <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
+                      {formatPrice(listing.price, listing.currency)}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">
+                      <Link
+                        href={`/car/${listing.id}`}
+                        className="hover:text-primary transition-colors"
+                      >
+                        {listing.year} {listing.make} {listing.model}
+                      </Link>
+                    </CardTitle>
+                    <CardDescription className="flex items-center gap-3 text-xs">
+                      <span className="flex items-center gap-1">
+                        <Settings className="w-3 h-3" />
+                        {listing.mileage.toLocaleString()} miles
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Fuel className="w-3 h-3" />
+                        Gas
+                      </span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">{listing.location}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-8 text-muted-foreground">
+                <p>No popular cars available at the moment</p>
+              </div>
+            )}
           </div>
 
           <div className="text-center mt-8">
-            <Button size="lg">Browse All Cars</Button>
+            <Link href="/browse">
+              <Button size="lg">Browse All Cars</Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -370,16 +319,20 @@ export default function HomePage() {
             and sell 3x faster.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" variant="secondary">
-              List Your Car Free
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary bg-transparent"
-            >
-              Upgrade to Premium
-            </Button>
+            <Link href="/browse">
+              <Button size="lg" variant="secondary">
+                Browse Cars
+              </Button>
+            </Link>
+            <Link href="/premium">
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary bg-transparent"
+              >
+                Upgrade to Premium
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -408,14 +361,14 @@ export default function HomePage() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/financing" className="hover:text-foreground transition-colors">
-                    Financing
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/insurance" className="hover:text-foreground transition-colors">
+                  <a 
+                    href="https://www.lkf.ee/et" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="hover:text-foreground transition-colors"
+                  >
                     Insurance
-                  </Link>
+                  </a>
                 </li>
               </ul>
             </div>
@@ -432,29 +385,14 @@ export default function HomePage() {
                     Premium Listings
                   </Link>
                 </li>
-                <li>
-                  <Link href="/pricing" className="hover:text-foreground transition-colors">
-                    Pricing Guide
-                  </Link>
-                </li>
               </ul>
             </div>
             <div>
               <h3 className="font-semibold text-foreground mb-3">Support</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>
-                  <Link href="/help" className="hover:text-foreground transition-colors">
-                    Help Center
-                  </Link>
-                </li>
-                <li>
                   <Link href="/contact" className="hover:text-foreground transition-colors">
                     Contact Us
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/safety" className="hover:text-foreground transition-colors">
-                    Safety Tips
                   </Link>
                 </li>
               </ul>

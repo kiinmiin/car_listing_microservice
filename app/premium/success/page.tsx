@@ -1,9 +1,45 @@
+'use client';
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, Crown, ArrowRight, Home } from "lucide-react"
 import Link from "next/link"
+import { useEffect, useState } from "react"
+import { useAuth } from "@/lib/auth-context"
+import { api } from "@/lib/api"
 
 export default function PaymentSuccessPage() {
+  const { user, refreshUser } = useAuth()
+  const [processing, setProcessing] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const processPayment = async () => {
+      if (!user) return
+      
+      try {
+        // Simulate webhook call to update subscription
+        await api.request('/stripe/test-webhook', {
+          method: 'POST',
+          body: JSON.stringify({
+            userId: user.userId,
+            listingId: 'premium-upgrade-' + Date.now(),
+            amountTotal: 2999 // $29.99
+          })
+        })
+        
+        // Refresh user data to get updated subscription
+        await refreshUser()
+        setProcessing(false)
+      } catch (err) {
+        console.error('Error processing payment:', err)
+        setError('Failed to process subscription upgrade')
+        setProcessing(false)
+      }
+    }
+
+    processPayment()
+  }, [user, refreshUser])
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="max-w-md w-full text-center">
@@ -13,10 +49,15 @@ export default function PaymentSuccessPage() {
           </div>
           <CardTitle className="flex items-center justify-center gap-2">
             <Crown className="w-5 h-5 text-accent" />
-            Payment Successful!
+            {processing ? 'Processing...' : error ? 'Payment Error' : 'Payment Successful!'}
           </CardTitle>
           <CardDescription>
-            Your listing has been upgraded to Premium. You'll start seeing increased visibility immediately.
+            {processing 
+              ? 'Updating your subscription...' 
+              : error 
+                ? error
+                : 'Your subscription has been upgraded to Premium. You now have access to premium features!'
+            }
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -30,20 +71,22 @@ export default function PaymentSuccessPage() {
             </ul>
           </div>
 
-          <div className="space-y-3">
-            <Button asChild className="w-full">
-              <Link href="/dashboard">
-                View Dashboard
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Link>
-            </Button>
-            <Button variant="outline" asChild className="w-full bg-transparent">
-              <Link href="/">
-                <Home className="w-4 h-4 mr-2" />
-                Go Home
-              </Link>
-            </Button>
-          </div>
+          {!processing && !error && (
+            <div className="space-y-3">
+              <Button asChild className="w-full">
+                <Link href="/dashboard?payment=success">
+                  View Dashboard
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Link>
+              </Button>
+              <Button variant="outline" asChild className="w-full bg-transparent">
+                <Link href="/">
+                  <Home className="w-4 h-4 mr-2" />
+                  Go Home
+                </Link>
+              </Button>
+            </div>
+          )}
 
           <p className="text-xs text-muted-foreground">Receipt sent to your email • Questions? Contact support</p>
         </CardContent>

@@ -86,4 +86,32 @@ export class ListingsController {
     const _userId = (req as any).user?.userId as string;
     return this.listings.attachImage(id, body.key);
   }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('user/my-listings')
+  async getUserListings(@Req() req: Request): Promise<any[]> {
+    const userId = (req as any).user?.userId as string;
+    return this.listings.getUserListings(userId);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('user/analytics')
+  async getUserAnalytics(@Req() req: Request): Promise<any> {
+    const userId = (req as any).user?.userId as string;
+    return this.listings.getUserAnalytics(userId);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post(':id/make-premium')
+  async makePremium(@Req() req: Request, @Param('id') id: string): Promise<any> {
+    const userId = (req as any).user?.userId as string;
+    return this.listings.makePremium(id, userId);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post(':id/mark-sold')
+  async markAsSold(@Req() req: Request, @Param('id') id: string): Promise<any> {
+    const userId = (req as any).user?.userId as string;
+    return this.listings.markAsSold(id, userId);
+  }
 }

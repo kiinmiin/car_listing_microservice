@@ -40,6 +40,8 @@ export class ListingsService {
       where.OR = [
         { title: { contains: query.q, mode: 'insensitive' } },
         { description: { contains: query.q, mode: 'insensitive' } },
+        { make: { contains: query.q, mode: 'insensitive' } },
+        { model: { contains: query.q, mode: 'insensitive' } },
       ];
     }
     return where;
@@ -70,7 +72,22 @@ export class ListingsService {
     const orderBy = this.buildOrderBy(query.sort);
 
     const [items, total] = await Promise.all([
-      this.prisma.listing.findMany({ where, orderBy, skip, take: limit }),
+      this.prisma.listing.findMany({ 
+        where, 
+        orderBy, 
+        skip, 
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            }
+          }
+        }
+      }),
       this.prisma.listing.count({ where }),
     ]);
 
@@ -78,7 +95,19 @@ export class ListingsService {
   }
 
   getById(id: string): Promise<any | null> {
-    return this.prisma.listing.findUnique({ where: { id } });
+    return this.prisma.listing.findUnique({ 
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          }
+        }
+      }
+    });
   }
 
   async create(data: any): Promise<any> {
@@ -115,5 +144,192 @@ export class ListingsService {
     const images = Array.isArray(listing.images) ? listing.images : [];
     if (!images.includes(key)) images.push(key);
     return this.prisma.listing.update({ where: { id: listingId }, data: { images } });
+  }
+
+  async getUserListings(userId: string): Promise<any[]> {
+    return this.prisma.listing.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          }
+        }
+      }
+    });
+  }
+
+  async getUserAnalytics(userId: string): Promise<any> {
+    const listings = await this.prisma.listing.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        title: true,
+        price: true,
+        featured: true,
+        createdAt: true,
+        updatedAt: true,
+        // Note: In a real app, you'd have view/inquiry tracking tables
+        // For now, we'll simulate some data
+      }
+    });
+
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    const activeListings = listings.filter(l => !l.title.includes('SOLD'));
+    const soldListings = listings.filter(l => l.title.includes('SOLD'));
+    
+    // Note: In a real app, these would come from tracking tables
+    // For now, we'll provide minimal simulated data based on listing age
+    const totalViews = activeListings.reduce((acc, listing) => {
+      const daysOld = Math.ceil((now.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+      return acc + Math.min(daysOld * 5, 50); // 5 views per day, max 50
+    }, 0);
+    
+    const totalInquiries = activeListings.reduce((acc, listing) => {
+      const daysOld = Math.ceil((now.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+      return acc + Math.min(daysOld * 0.5, 5); // 0.5 inquiries per day, max 5
+    }, 0);
+    
+    const totalFavorites = activeListings.reduce((acc, listing) => {
+      const daysOld = Math.ceil((now.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+      return acc + Math.min(daysOld * 1, 10); // 1 favorite per day, max 10
+    }, 0);
+    
+    const averageDaysToSell = soldListings.length > 0 
+      ? Math.round(soldListings.reduce((acc, listing) => {
+          const daysDiff = Math.ceil((listing.updatedAt.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+          return acc + daysDiff;
+        }, 0) / soldListings.length)
+      : 0;
+
+    const conversionRate = totalViews > 0 ? (totalInquiries / totalViews) * 100 : 0;
+
+    return {
+      totalViews,
+      totalInquiries,
+      totalFavorites,
+      averageDaysToSell,
+      conversionRate: Math.round(conversionRate * 10) / 10,
+      activeListings: activeListings.length,
+      soldListings: soldListings.length,
+      premiumListings: listings.filter(l => l.featured).length,
+      recentListings: listings.slice(0, 5).map(listing => {
+        const daysOld = Math.ceil((now.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        return {
+          ...listing,
+          // Simulate individual listing metrics based on age
+          views: Math.min(daysOld * 5, 50),
+          inquiries: Math.min(Math.floor(daysOld * 0.5), 5),
+          favorites: Math.min(daysOld, 10),
+          daysListed: daysOld
+        };
+      })
+    };
+  }
+
+  async makePremium(listingId: string, userId: string): Promise<any> {
+    // First, check if the user has premium credits remaining
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { premiumListingsRemaining: true }
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (user.premiumListingsRemaining <= 0) {
+      throw new Error('No premium listings remaining');
+    }
+
+    // Check if the listing exists and belongs to the user
+    const listing = await this.prisma.listing.findFirst({
+      where: { 
+        id: listingId, 
+        userId: userId 
+      }
+    });
+
+    if (!listing) {
+      throw new Error('Listing not found or does not belong to user');
+    }
+
+    if (listing.featured) {
+      throw new Error('Listing is already premium');
+    }
+
+    // Use a transaction to update both the listing and user
+    return await this.prisma.$transaction(async (tx) => {
+      // Update the listing to be featured
+      const updatedListing = await tx.listing.update({
+        where: { id: listingId },
+        data: { featured: true },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            }
+          }
+        }
+      });
+
+      // Decrement the user's premium listings remaining
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          premiumListingsRemaining: {
+            decrement: 1
+          }
+        }
+      });
+
+      return updatedListing;
+    });
+  }
+
+  async markAsSold(listingId: string, userId: string): Promise<any> {
+    // Check if the listing exists and belongs to the user
+    const listing = await this.prisma.listing.findFirst({
+      where: { 
+        id: listingId, 
+        userId: userId 
+      }
+    });
+
+    if (!listing) {
+      throw new Error('Listing not found or does not belong to user');
+    }
+
+    if (listing.title.includes('SOLD')) {
+      throw new Error('Listing is already marked as sold');
+    }
+
+    // Update the listing title to include "SOLD" prefix
+    return await this.prisma.listing.update({
+      where: { id: listingId },
+      data: { 
+        title: `SOLD - ${listing.title}`,
+        featured: false // Remove premium status when sold
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          }
+        }
+      }
+    });
   }
 }

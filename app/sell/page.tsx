@@ -1,6 +1,7 @@
-"use client"
+'use client';
 
-import { useState } from "react"
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,45 +11,50 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Car, Upload, Crown, CheckCircle, ArrowRight, ArrowLeft, DollarSign, Camera, FileText, Zap } from "lucide-react"
+import { Car, Upload, Crown, CheckCircle, ArrowRight, ArrowLeft, DollarSign, Camera, FileText, Zap, AlertCircle } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from '@/lib/auth-context'
+import { api } from '@/lib/api'
+import { Header } from '@/components/header'
 
 export default function SellPage() {
   const [currentStep, setCurrentStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [formData, setFormData] = useState({
     // Vehicle Info
     make: "",
     model: "",
     year: "",
     mileage: "",
-    vin: "",
     // Details
     exterior: "",
     interior: "",
     transmission: "",
-    drivetrain: "",
-    engine: "",
     fuel: "",
-    // Condition
-    condition: "",
-    accidents: "",
-    maintenance: "",
     // Pricing
     price: "",
-    negotiable: false,
     // Description
     title: "",
     description: "",
     features: [] as string[],
     // Contact
-    name: "",
-    phone: "",
-    email: "",
     location: "",
   })
+  const { user, loading: authLoading } = useAuth()
+  const router = useRouter()
 
   const totalSteps = 5
   const progress = (currentStep / totalSteps) * 100
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/auth/login?redirect=/sell')
+    }
+  }, [user, authLoading, router])
 
   const nextStep = () => {
     if (currentStep < totalSteps) {
@@ -75,40 +81,129 @@ export default function SellPage() {
     }))
   }
 
+  const handleImageUpload = async (files: FileList) => {
+    if (!files.length) return
+
+    setUploadingImages(true)
+    setError('')
+
+    try {
+      const uploadPromises = Array.from(files).map(async (file) => {
+        // Get upload URL from backend (using a temporary listing ID for now)
+        const { url, key } = await api.getUploadUrl('temp', file.type)
+        
+        // Upload file to S3/MinIO
+        const uploadResponse = await fetch(url, {
+          method: 'PUT',
+          body: file,
+          headers: {
+            'Content-Type': file.type,
+          },
+        })
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload image')
+        }
+
+        return key
+      })
+
+      const uploadedKeys = await Promise.all(uploadPromises)
+      setUploadedImages(prev => [...prev, ...uploadedKeys])
+    } catch (err) {
+      setError('Failed to upload images. Please try again.')
+      console.error('Upload error:', err)
+    } finally {
+      setUploadingImages(false)
+    }
+  }
+
+  const removeImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSubmit = async () => {
+    if (!user) {
+      setError('You must be logged in to create a listing')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+
+    try {
+      // Validate required fields
+      if (!formData.make || !formData.model || !formData.year || !formData.mileage || !formData.price) {
+        setError('Please fill in all required fields')
+        return
+      }
+
+      // Create listing
+      const listingData = {
+        title: formData.title || `${formData.year} ${formData.make} ${formData.model}`,
+        description: formData.description || `Clean ${formData.year} ${formData.make} ${formData.model} with ${formData.mileage} miles.`,
+        price: parseInt(formData.price) * 100, // Convert to cents
+        currency: 'USD',
+        make: formData.make,
+        model: formData.model,
+        year: parseInt(formData.year),
+        mileage: parseInt(formData.mileage),
+        location: formData.location || 'Not specified',
+        images: uploadedImages,
+        featured: false,
+      }
+
+      const listing = await api.createListing(listingData)
+      
+      // Redirect to the new listing
+      router.push(`/car/${listing.id}`)
+    } catch (err) {
+      setError('Failed to create listing. Please try again.')
+      console.error('Create listing error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Show loading if checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show login prompt if not authenticated
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Login Required</CardTitle>
+            <CardDescription>
+              You need to be logged in to create a listing
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Link href="/auth/login?redirect=/sell" className="w-full">
+              <Button className="w-full">Sign In</Button>
+            </Link>
+            <Link href="/auth/register?redirect=/sell" className="w-full">
+              <Button variant="outline" className="w-full">Create Account</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Link href="/" className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <span className="text-primary-foreground font-bold text-lg">C</span>
-                </div>
-                <span className="text-xl font-bold text-foreground">CarMarket</span>
-              </Link>
-            </div>
-            <nav className="hidden md:flex items-center space-x-6">
-              <Link href="/browse" className="text-foreground hover:text-primary transition-colors">
-                Browse Cars
-              </Link>
-              <Link href="/sell" className="text-primary font-medium">
-                Sell Your Car
-              </Link>
-              <Link href="/premium" className="text-accent hover:text-accent/80 transition-colors font-medium">
-                Premium Listings
-              </Link>
-            </nav>
-            <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm">
-                Sign In
-              </Button>
-              <Button size="sm">Get Started</Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header currentPage="sell" />
 
       <div className="container mx-auto px-4 py-8">
         {/* Header Section */}
@@ -130,6 +225,16 @@ export default function SellPage() {
           </div>
           <Progress value={progress} className="h-2" />
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="max-w-4xl mx-auto mb-6">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              {error}
+            </div>
+          </div>
+        )}
 
         <div className="max-w-4xl mx-auto">
           <div className="grid lg:grid-cols-4 gap-8">
@@ -264,22 +369,19 @@ export default function SellPage() {
                             placeholder="e.g., 25000"
                             value={formData.mileage}
                             onChange={(e) => handleInputChange("mileage", e.target.value)}
+                            type="number"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <Label htmlFor="vin">VIN (Vehicle Identification Number) *</Label>
+                        <Label htmlFor="location">Location *</Label>
                         <Input
-                          id="vin"
-                          placeholder="17-character VIN"
-                          value={formData.vin}
-                          onChange={(e) => handleInputChange("vin", e.target.value)}
-                          maxLength={17}
+                          id="location"
+                          placeholder="e.g., San Francisco, CA"
+                          value={formData.location}
+                          onChange={(e) => handleInputChange("location", e.target.value)}
                         />
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Found on your dashboard, door frame, or registration
-                        </p>
                       </div>
                     </div>
                   )}
@@ -293,29 +395,47 @@ export default function SellPage() {
                         <p className="text-muted-foreground mb-4">
                           Add up to 20 photos. First photo will be your main listing image.
                         </p>
-                        <Button>
-                          <Upload className="w-4 h-4 mr-2" />
-                          Choose Photos
-                        </Button>
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          onChange={(e) => e.target.files && handleImageUpload(e.target.files)}
+                          className="hidden"
+                          id="image-upload"
+                          disabled={uploadingImages}
+                        />
+                        <label htmlFor="image-upload">
+                          <Button disabled={uploadingImages} asChild>
+                            <span>
+                              <Upload className="w-4 h-4 mr-2" />
+                              {uploadingImages ? 'Uploading...' : 'Choose Photos'}
+                            </span>
+                          </Button>
+                        </label>
                       </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {[
-                          "Front exterior view",
-                          "Rear exterior view",
-                          "Driver side view",
-                          "Passenger side view",
-                          "Interior dashboard",
-                          "Front seats",
-                          "Rear seats",
-                          "Engine bay",
-                        ].map((photoType, index) => (
-                          <div key={index} className="border-2 border-dashed border-border rounded-lg p-4 text-center">
-                            <Camera className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                            <p className="text-sm text-muted-foreground">{photoType}</p>
-                          </div>
-                        ))}
-                      </div>
+                      {/* Uploaded Images */}
+                      {uploadedImages.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {uploadedImages.map((imageKey, index) => (
+                            <div key={index} className="relative group">
+                              <img
+                                src={`/abstract-geometric-shapes.png?height=150&width=200&query=car image ${index + 1}`}
+                                alt={`Upload ${index + 1}`}
+                                className="w-full h-32 object-cover rounded-lg border"
+                              />
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => removeImage(index)}
+                              >
+                                ×
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                       <div className="bg-accent/10 border border-accent/20 rounded-lg p-4">
                         <div className="flex items-start gap-3">
@@ -441,6 +561,16 @@ export default function SellPage() {
                       </div>
 
                       <div>
+                        <Label htmlFor="title">Listing Title</Label>
+                        <Input
+                          id="title"
+                          placeholder="e.g., Clean 2020 Honda Civic with Low Miles"
+                          value={formData.title}
+                          onChange={(e) => handleInputChange("title", e.target.value)}
+                        />
+                      </div>
+
+                      <div>
                         <Label htmlFor="description">Description</Label>
                         <Textarea
                           id="description"
@@ -466,19 +596,9 @@ export default function SellPage() {
                             value={formData.price}
                             onChange={(e) => handleInputChange("price", e.target.value)}
                             className="pl-10"
+                            type="number"
                           />
                         </div>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="negotiable"
-                          checked={formData.negotiable}
-                          onCheckedChange={(checked) => handleInputChange("negotiable", checked as boolean)}
-                        />
-                        <Label htmlFor="negotiable" className="cursor-pointer">
-                          Price is negotiable
-                        </Label>
                       </div>
 
                       <div className="bg-muted/50 rounded-lg p-4">
@@ -503,13 +623,15 @@ export default function SellPage() {
                             <p className="text-sm text-muted-foreground mb-3">
                               Premium listings get featured placement, priority in search results, and sell 3x faster.
                             </p>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="border-accent text-accent hover:bg-accent hover:text-accent-foreground bg-transparent"
-                            >
-                              Learn More About Premium
-                            </Button>
+                            <Link href="/premium">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-accent text-accent hover:bg-accent hover:text-accent-foreground bg-transparent"
+                              >
+                                Learn More About Premium
+                              </Button>
+                            </Link>
                           </div>
                         </div>
                       </div>
@@ -543,6 +665,10 @@ export default function SellPage() {
                                 <span className="text-muted-foreground">Price:</span>{" "}
                                 {formData.price ? `$${formData.price}` : "Not specified"}
                               </p>
+                              <p>
+                                <span className="text-muted-foreground">Location:</span>{" "}
+                                {formData.location || "Not specified"}
+                              </p>
                             </div>
                           </div>
                           <div>
@@ -567,23 +693,12 @@ export default function SellPage() {
                                 <span className="text-muted-foreground">Features:</span> {formData.features.length}{" "}
                                 selected
                               </p>
+                              <p>
+                                <span className="text-muted-foreground">Images:</span> {uploadedImages.length}{" "}
+                                uploaded
+                              </p>
                             </div>
                           </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox id="terms" />
-                          <Label htmlFor="terms" className="text-sm cursor-pointer">
-                            I agree to the Terms of Service and Privacy Policy
-                          </Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox id="contact" />
-                          <Label htmlFor="contact" className="text-sm cursor-pointer">
-                            I agree to be contacted by potential buyers
-                          </Label>
                         </div>
                       </div>
 
@@ -619,9 +734,18 @@ export default function SellPage() {
                         <ArrowRight className="w-4 h-4 ml-2" />
                       </Button>
                     ) : (
-                      <Button size="lg" className="px-8">
-                        Publish Listing
-                        <CheckCircle className="w-4 h-4 ml-2" />
+                      <Button size="lg" className="px-8" onClick={handleSubmit} disabled={loading}>
+                        {loading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            Publish Listing
+                            <CheckCircle className="w-4 h-4 ml-2" />
+                          </>
+                        )}
                       </Button>
                     )}
                   </div>
