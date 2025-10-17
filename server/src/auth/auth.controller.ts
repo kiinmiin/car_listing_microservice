@@ -21,18 +21,22 @@ export class AuthController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('me')
-  async me(@Req() req: Request): Promise<{ userId: string; name: string; email: string; phone?: string; subscription: string; premiumListingsRemaining: number; createdAt?: string }>
+  async me(@Req() req: Request): Promise<{ userId: string; name: string; email: string; phone?: string; subscription: string; premiumListingsRemaining: number; createdAt?: string; subscriptionExpiresAt?: string; daysRemaining?: number }>
   {
     const userId = (req as any).user?.userId as string;
     const user = await this.auth.getUserById(userId);
+    const effectiveSubscription = await this.auth.getEffectiveSubscription(userId);
+    
     return { 
       userId: user.id, 
       name: user.name || '', 
       email: user.email,
       phone: user.phone || undefined,
-      subscription: user.subscription || 'free',
-      premiumListingsRemaining: user.premiumListingsRemaining || 0,
-      createdAt: user.createdAt.toISOString()
+      subscription: effectiveSubscription.subscription,
+      premiumListingsRemaining: effectiveSubscription.premiumListingsRemaining,
+      createdAt: user.createdAt.toISOString(),
+      subscriptionExpiresAt: effectiveSubscription.expiresAt?.toISOString(),
+      daysRemaining: effectiveSubscription.daysRemaining
     };
   }
 
@@ -42,6 +46,15 @@ export class AuthController {
   {
     const userId = (req as any).user?.userId as string;
     await this.auth.updateProfile(userId, body);
+    return { success: true };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('downgrade-subscription')
+  async downgradeSubscription(@Req() req: Request, @Body() body: { planId: string }): Promise<{ success: boolean }>
+  {
+    const userId = (req as any).user?.userId as string;
+    await this.auth.downgradeSubscription(userId, body.planId);
     return { success: true };
   }
 }

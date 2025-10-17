@@ -15,7 +15,7 @@ export class StripeController {
     const priceCents = body.priceCents ?? 999; // $9.99 default
     const currency = body.currency ?? 'usd';
 
-    const successUrl = process.env.CORS_ORIGIN ? `${process.env.CORS_ORIGIN}/premium/success` : 'http://localhost:3000/premium/success';
+    const successUrl = process.env.CORS_ORIGIN ? `${process.env.CORS_ORIGIN}/premium/success?amount=${priceCents}` : `http://localhost:3000/premium/success?amount=${priceCents}`;
     const cancelUrl = process.env.CORS_ORIGIN ? `${process.env.CORS_ORIGIN}/premium` : 'http://localhost:3000/premium';
 
     const session = await this.stripeService.createCheckoutSession({
@@ -42,17 +42,30 @@ export class StripeController {
         const priceCents = amountTotal;
         let subscription = 'free';
         let premiumListingsRemaining = 0;
+        let subscriptionDurationDays = 0;
         
-        if (priceCents >= 2999) { // $29.99 or more
+        if (priceCents >= 4999) { // $49.99 or more - Spotlight plan
+          subscription = 'spotlight';
+          premiumListingsRemaining = 10; // Give 10 premium listings for spotlight
+          subscriptionDurationDays = 90; // 90 days for spotlight
+        } else if (priceCents >= 2999) { // $29.99 or more - Premium plan
           subscription = 'premium';
-          premiumListingsRemaining = 5; // Give 5 premium listings
+          premiumListingsRemaining = 5; // Give 5 premium listings for premium
+          subscriptionDurationDays = 60; // 60 days for premium
         }
+        
+        const now = new Date();
+        const subscriptionExpiresAt = new Date(now.getTime() + (subscriptionDurationDays * 24 * 60 * 60 * 1000));
+        
+        console.log(`Test webhook processing: userId=${userId}, priceCents=${priceCents}, subscription=${subscription}, premiumListingsRemaining=${premiumListingsRemaining}, expiresAt=${subscriptionExpiresAt.toISOString()}`);
         
         await this.prisma.user.update({
           where: { id: userId },
           data: { 
             subscription,
-            premiumListingsRemaining
+            premiumListingsRemaining,
+            subscriptionExpiresAt,
+            subscriptionStartedAt: now
           }
         });
         
@@ -91,17 +104,30 @@ export class StripeController {
             const priceCents = session.amount_total;
             let subscription = 'free';
             let premiumListingsRemaining = 0;
+            let subscriptionDurationDays = 0;
             
-            if (priceCents >= 2999) { // $29.99 or more
+            if (priceCents >= 4999) { // $49.99 or more - Spotlight plan
+              subscription = 'spotlight';
+              premiumListingsRemaining = 10; // Give 10 premium listings for spotlight
+              subscriptionDurationDays = 90; // 90 days for spotlight
+            } else if (priceCents >= 2999) { // $29.99 or more - Premium plan
               subscription = 'premium';
-              premiumListingsRemaining = 5; // Give 5 premium listings
+              premiumListingsRemaining = 5; // Give 5 premium listings for premium
+              subscriptionDurationDays = 60; // 60 days for premium
             }
+            
+            const now = new Date();
+            const subscriptionExpiresAt = new Date(now.getTime() + (subscriptionDurationDays * 24 * 60 * 60 * 1000));
+            
+            console.log(`Webhook processing: userId=${userId}, priceCents=${priceCents}, subscription=${subscription}, premiumListingsRemaining=${premiumListingsRemaining}, expiresAt=${subscriptionExpiresAt.toISOString()}`);
             
             await this.prisma.user.update({
               where: { id: userId },
               data: { 
                 subscription,
-                premiumListingsRemaining
+                premiumListingsRemaining,
+                subscriptionExpiresAt,
+                subscriptionStartedAt: now
               }
             });
           }

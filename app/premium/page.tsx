@@ -1,13 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Crown, Check, TrendingUp, Eye, Zap, Shield, CreditCard, Lock, ArrowRight } from "lucide-react"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { Crown, Check, TrendingUp, Eye, Zap, Shield, CreditCard, Lock, ArrowRight, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { Header } from '@/components/header'
 import { api } from '@/lib/api'
@@ -18,12 +19,28 @@ export default function PremiumPage() {
   const [selectedPlan, setSelectedPlan] = useState("premium")
   const [showPayment, setShowPayment] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { user } = useAuth()
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false)
+  const [showDowngradeDialog, setShowDowngradeDialog] = useState(false)
+  const [pendingAction, setPendingAction] = useState<{type: 'upgrade' | 'downgrade', planId: string} | null>(null)
+  const { user, refreshUser } = useAuth()
   const router = useRouter()
 
   // Check if user already has premium subscription
-  const isPremiumUser = user?.subscription === 'premium'
+  const isPremiumUser = user?.subscription === 'premium' || user?.subscription === 'spotlight'
   const isFreeUser = user?.subscription === 'free'
+
+  // Set initial selected plan based on user's current subscription
+  React.useEffect(() => {
+    if (user) {
+      if (user.subscription === 'premium') {
+        setSelectedPlan('premium')
+      } else if (user.subscription === 'spotlight') {
+        setSelectedPlan('spotlight')
+      } else {
+        setSelectedPlan('basic')
+      }
+    }
+  }, [user])
 
   const plans = [
     {
@@ -81,15 +98,44 @@ export default function PremiumPage() {
     },
   ]
 
-  const handleUpgrade = async () => {
+  const handlePlanSelection = (planId: string) => {
     if (!user) {
       router.push('/auth/login?redirect=/premium')
       return
     }
 
-    if (isPremiumUser) {
-      // User already has premium, redirect to dashboard
-      router.push('/dashboard')
+    const isPremiumUser = user?.subscription === 'premium' || user?.subscription === 'spotlight'
+    const isCurrentPlan = (user?.subscription === 'premium' && planId === 'premium') || 
+                         (user?.subscription === 'spotlight' && planId === 'spotlight') || 
+                         (!isPremiumUser && planId === 'basic')
+    
+    if (isCurrentPlan) {
+      return // Don't allow selecting current plan
+    }
+
+    // Set the selected plan first
+    setSelectedPlan(planId)
+
+    if ((isPremiumUser && planId === 'basic') || (user?.subscription === 'spotlight' && planId === 'premium')) {
+      // Downgrade - show confirmation dialog
+      setPendingAction({ type: 'downgrade', planId })
+      setShowDowngradeDialog(true)
+    } else if (planId === 'premium' || planId === 'spotlight') {
+      // Upgrade - scroll to payment section and show upgrade button
+      // The upgrade will be handled by the "Upgrade to Premium Listing" button
+      // Scroll to the payment section
+      setTimeout(() => {
+        const paymentSection = document.getElementById('payment-section')
+        if (paymentSection) {
+          paymentSection.scrollIntoView({ behavior: 'smooth' })
+        }
+      }, 100)
+    }
+  }
+
+  const handleUpgrade = async () => {
+    if (!user) {
+      router.push('/auth/login?redirect=/premium')
       return
     }
 
@@ -97,21 +143,53 @@ export default function PremiumPage() {
       return
     }
 
+    // Show confirmation dialog for upgrade
+    setPendingAction({ type: 'upgrade', planId: selectedPlan })
+    setShowUpgradeDialog(true)
+  }
+
+  const handleConfirmUpgrade = async () => {
+    if (!pendingAction) return
+    
     setLoading(true)
     try {
-      // For now, we'll use a dummy listing ID since we don't have a specific listing
-      // In a real app, you'd either create a listing first or handle this differently
       const dummyListingId = "premium-upgrade-" + Date.now()
-      
-      const priceCents = selectedPlan === "premium" ? 2999 : 4999 // $29.99 or $49.99
-      
+      const priceCents = pendingAction.planId === "premium" ? 2999 : 4999
       const { url } = await api.createCheckoutSession(dummyListingId, priceCents, 'usd')
-      
-      // Redirect to Stripe Checkout
+      setShowUpgradeDialog(false)
+      setPendingAction(null)
       window.location.href = url
     } catch (error) {
       console.error('Error creating checkout session:', error)
       alert('Error processing payment. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleConfirmDowngrade = async () => {
+    if (!pendingAction) return
+    
+    setLoading(true)
+    try {
+      // Call API to downgrade subscription
+      await api.request('/auth/downgrade-subscription', {
+        method: 'POST',
+        body: JSON.stringify({ planId: pendingAction.planId })
+      })
+      
+      // Refresh user data
+      await refreshUser()
+      
+      setShowDowngradeDialog(false)
+      setPendingAction(null)
+      setSelectedPlan(pendingAction.planId)
+      
+      // Show success message
+      alert('Subscription downgraded successfully. Your premium features will remain active until the end of your current billing period.')
+    } catch (error) {
+      console.error('Error downgrading subscription:', error)
+      alert('Error downgrading subscription. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -141,12 +219,17 @@ export default function PremiumPage() {
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <Crown className="w-5 h-5 text-green-600" />
                     <span className="font-semibold text-green-800 dark:text-green-200">
-                      Premium Member
+                      {user?.subscription === 'spotlight' ? 'Spotlight' : 'Premium'} Member
                     </span>
                   </div>
                   <p className="text-sm text-green-700 dark:text-green-300">
                     You have {user?.premiumListingsRemaining || 0} premium listings remaining
                   </p>
+                  {user?.daysRemaining && user.daysRemaining > 0 && (
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                      {user.daysRemaining} days remaining
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -224,16 +307,20 @@ export default function PremiumPage() {
                       <Button
                         className="w-full"
                         variant={selectedPlan === plan.id ? "default" : "outline"}
-                        onClick={() => setSelectedPlan(plan.id)}
+                        onClick={() => handlePlanSelection(plan.id)}
                         disabled={
-                          (isPremiumUser && plan.id === 'basic') ||
-                          (isPremiumUser && plan.id === 'premium') ||
-                          (isPremiumUser && plan.id === 'spotlight')
+                          (user?.subscription === 'premium' && plan.id === 'premium') || 
+                          (user?.subscription === 'spotlight' && plan.id === 'spotlight') || 
+                          (!isPremiumUser && plan.id === 'basic')
                         }
                       >
-                        {isPremiumUser && plan.id === 'premium' ? "Current Plan" :
-                         isPremiumUser && plan.id === 'spotlight' ? "Upgrade Available" :
-                         isPremiumUser && plan.id === 'basic' ? "Downgrade" :
+                        {(user?.subscription === 'premium' && plan.id === 'premium') || 
+                         (user?.subscription === 'spotlight' && plan.id === 'spotlight') || 
+                         (!isPremiumUser && plan.id === 'basic') ? "Current Plan" :
+                         (user?.subscription === 'spotlight' && plan.id === 'premium') ? "Downgrade" :
+                         (user?.subscription === 'spotlight' && plan.id === 'basic') ? "Downgrade" :
+                         (user?.subscription === 'premium' && plan.id === 'spotlight') ? "Upgrade Available" :
+                         (user?.subscription === 'premium' && plan.id === 'basic') ? "Downgrade" :
                          selectedPlan === plan.id ? "Selected" : "Select Plan"}
                       </Button>
                     </CardContent>
@@ -283,14 +370,14 @@ export default function PremiumPage() {
             </div>
 
             {/* CTA Section */}
-            <div className="text-center">
-              {isPremiumUser ? (
+            <div id="payment-section" className="text-center">
+              {isPremiumUser && ((user?.subscription === 'premium' && selectedPlan === 'premium') || (user?.subscription === 'spotlight' && selectedPlan === 'spotlight')) ? (
                 <div className="space-y-4">
                   <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6">
                     <div className="flex items-center justify-center gap-2 mb-2">
                       <Crown className="w-5 h-5 text-green-600" />
                       <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
-                        You're already a Premium member!
+                        You're already a {user?.subscription === 'spotlight' ? 'Spotlight' : 'Premium'} member!
                       </h3>
                     </div>
                     <p className="text-green-700 dark:text-green-300 mb-4">
@@ -434,6 +521,102 @@ export default function PremiumPage() {
             </div>
           </div>
         )}
+
+        {/* Upgrade Confirmation Dialog */}
+        <AlertDialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <Crown className="w-5 h-5 text-primary" />
+                Upgrade Subscription
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                You are about to upgrade to the {pendingAction?.planId === 'premium' ? 'Premium' : 'Spotlight'} plan.
+                {pendingAction?.planId === 'premium' && (
+                  <div className="mt-2 p-3 bg-primary/10 rounded-lg">
+                    <p className="font-medium">Premium Plan - $29.99</p>
+                    <ul className="text-sm mt-1 space-y-1">
+                      <li>• Featured placement at top of listings</li>
+                      <li>• 5x more visibility in search results</li>
+                      <li>• Advanced analytics dashboard</li>
+                      <li>• Priority customer support</li>
+                    </ul>
+                  </div>
+                )}
+                {pendingAction?.planId === 'spotlight' && (
+                  <div className="mt-2 p-3 bg-primary/10 rounded-lg">
+                    <p className="font-medium">Spotlight Plan - $49.99</p>
+                    <ul className="text-sm mt-1 space-y-1">
+                      <li>• Everything in Premium</li>
+                      <li>• Maximum visibility boost</li>
+                      <li>• Featured in homepage carousel</li>
+                      <li>• Dedicated account manager</li>
+                    </ul>
+                  </div>
+                )}
+                <p className="mt-3 text-sm text-muted-foreground">
+                  You will be redirected to our secure payment processor to complete the upgrade.
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleConfirmUpgrade}
+                disabled={loading}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {loading ? 'Processing...' : 'Continue to Payment'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Downgrade Confirmation Dialog */}
+        <AlertDialog open={showDowngradeDialog} onOpenChange={setShowDowngradeDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-orange-500" />
+                Downgrade Subscription
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                You are about to downgrade to the {pendingAction?.planId === 'premium' ? 'Premium' : 'Basic'} plan. This will affect your current premium features.
+                <div className="mt-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                  <p className="font-medium text-orange-800 dark:text-orange-200">What happens when you downgrade:</p>
+                  <ul className="text-sm mt-1 space-y-1 text-orange-700 dark:text-orange-300">
+                    <li>• Your premium features will remain active until the end of your current billing period</li>
+                    <li>• Your listings will return to standard placement</li>
+                    {pendingAction?.planId === 'premium' ? (
+                      <>
+                        <li>• You'll lose access to advanced analytics and homepage carousel features</li>
+                        <li>• You'll have 5 premium listings instead of 10</li>
+                      </>
+                    ) : (
+                      <li>• You'll lose access to advanced analytics</li>
+                    )}
+                    <li>• You can upgrade again at any time</li>
+                  </ul>
+                </div>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Are you sure you want to proceed with the downgrade?
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={loading}>
+                Keep {user?.subscription === 'spotlight' ? 'Spotlight' : 'Premium'}
+              </AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleConfirmDowngrade}
+                disabled={loading}
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                {loading ? 'Processing...' : 'Yes, Downgrade'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </div>
     </div>

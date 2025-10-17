@@ -548,7 +548,7 @@ export default function DashboardPage() {
                             </div>
                           )}
                           
-                          {!listing.title.includes('SOLD') && !listing.featured && user?.subscription === 'premium' && (
+                          {!listing.title.includes('SOLD') && !listing.featured && (user?.subscription === 'premium' || user?.subscription === 'spotlight') && (
                             <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
                               <div className="flex items-center justify-between">
                                 <div>
@@ -722,7 +722,7 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2">
                       <Crown className="w-4 h-4 text-muted-foreground" />
                       <span className="text-sm capitalize">{user.subscription}</span>
-                      {user.subscription === 'premium' ? (
+                      {(user.subscription === 'premium' || user.subscription === 'spotlight') ? (
                         <div className="flex items-center gap-1 text-xs text-green-600">
                           <Crown className="w-3 h-3" />
                           <span>Active</span>
@@ -735,10 +735,17 @@ export default function DashboardPage() {
                         </Button>
                       )}
                     </div>
-                    {user.subscription === 'premium' && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {user.premiumListingsRemaining} premium listings remaining
-                      </p>
+                    {(user.subscription === 'premium' || user.subscription === 'spotlight') && (
+                      <div className="mt-1">
+                        <p className="text-xs text-muted-foreground">
+                          {user.premiumListingsRemaining} premium listings remaining
+                        </p>
+                        {user.daysRemaining && user.daysRemaining > 0 && (
+                          <p className="text-xs text-orange-600 dark:text-orange-400">
+                            {user.daysRemaining} days remaining
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
 

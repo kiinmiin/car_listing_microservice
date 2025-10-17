@@ -12,19 +12,34 @@ export default function PaymentSuccessPage() {
   const { user, refreshUser } = useAuth()
   const [processing, setProcessing] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [subscriptionType, setSubscriptionType] = useState<string>('Premium')
 
   useEffect(() => {
     const processPayment = async () => {
       if (!user) return
       
       try {
+        // Get the payment amount from URL parameters or default to 4999 for spotlight
+        const urlParams = new URLSearchParams(window.location.search)
+        const amountParam = urlParams.get('amount')
+        const amountTotal = amountParam ? parseInt(amountParam) : 4999 // Default to $49.99 for spotlight
+        
+        // Set subscription type based on amount
+        if (amountTotal >= 4999) {
+          setSubscriptionType('Spotlight')
+        } else if (amountTotal >= 2999) {
+          setSubscriptionType('Premium')
+        } else {
+          setSubscriptionType('Premium')
+        }
+        
         // Simulate webhook call to update subscription
         await api.request('/stripe/test-webhook', {
           method: 'POST',
           body: JSON.stringify({
             userId: user.userId,
             listingId: 'premium-upgrade-' + Date.now(),
-            amountTotal: 2999 // $29.99
+            amountTotal: amountTotal
           })
         })
         
@@ -56,7 +71,7 @@ export default function PaymentSuccessPage() {
               ? 'Updating your subscription...' 
               : error 
                 ? error
-                : 'Your subscription has been upgraded to Premium. You now have access to premium features!'
+                : `Your subscription has been upgraded to ${subscriptionType}. You now have access to premium features!`
             }
           </CardDescription>
         </CardHeader>
@@ -66,8 +81,9 @@ export default function PaymentSuccessPage() {
             <ul className="text-sm text-muted-foreground space-y-1 text-left">
               <li>• Your listing is now featured at the top</li>
               <li>• Premium badge added to your car</li>
-              <li>• 5x more visibility in search results</li>
-              <li>• Analytics dashboard now available</li>
+              <li>• {subscriptionType === 'Spotlight' ? '10x' : '5x'} more visibility in search results</li>
+              <li>• {subscriptionType === 'Spotlight' ? 'Advanced' : 'Basic'} analytics dashboard now available</li>
+              {subscriptionType === 'Spotlight' && <li>• Featured in homepage carousel</li>}
             </ul>
           </div>
 

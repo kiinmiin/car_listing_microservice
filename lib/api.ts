@@ -43,6 +43,8 @@ export interface User {
   subscription: string;
   premiumListingsRemaining: number;
   createdAt?: string;
+  subscriptionExpiresAt?: string;
+  daysRemaining?: number;
 }
 
 class ApiClient {
