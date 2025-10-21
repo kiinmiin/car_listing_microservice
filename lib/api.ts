@@ -12,7 +12,12 @@ export interface Listing {
   mileage: number;
   location: string;
   images: string[];
+  features: string[];
   featured: boolean;
+  exterior?: string;
+  interior?: string;
+  transmission?: string;
+  fuel?: string;
   userId: string;
   createdAt: string;
   updatedAt: string;

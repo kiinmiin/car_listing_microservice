@@ -37,12 +37,36 @@ export class ListingsService {
       if (query.priceMax) where.price.lte = query.priceMax;
     }
     if (query.q) {
-      where.OR = [
+      const searchTerms = query.q.trim().split(/\s+/);
+      const searchConditions = [];
+      
+      // Add full phrase search
+      searchConditions.push(
         { title: { contains: query.q, mode: 'insensitive' } },
         { description: { contains: query.q, mode: 'insensitive' } },
         { make: { contains: query.q, mode: 'insensitive' } },
-        { model: { contains: query.q, mode: 'insensitive' } },
-      ];
+        { model: { contains: query.q, mode: 'insensitive' } }
+      );
+      
+      // Add individual word searches
+      searchTerms.forEach(term => {
+        if (term.length > 0) {
+          searchConditions.push(
+            { title: { contains: term, mode: 'insensitive' } },
+            { description: { contains: term, mode: 'insensitive' } },
+            { make: { contains: term, mode: 'insensitive' } },
+            { model: { contains: term, mode: 'insensitive' } }
+          );
+        }
+      });
+      
+      // Add year search if the query is a number
+      const yearMatch = query.q.match(/^\d{4}$/);
+      if (yearMatch) {
+        searchConditions.push({ year: { equals: Number(query.q) } });
+      }
+      
+      where.OR = searchConditions;
     }
     return where;
   }
@@ -91,11 +115,17 @@ export class ListingsService {
       this.prisma.listing.count({ where }),
     ]);
 
-    return { items, total, page, limit };
+    // Transform image URLs to full URLs
+    const itemsWithImageUrls = items.map(item => ({
+      ...item,
+      images: item.images?.map((imageKey: string) => this.storage.getPublicUrl(imageKey)) || []
+    }));
+
+    return { items: itemsWithImageUrls, total, page, limit };
   }
 
-  getById(id: string): Promise<any | null> {
-    return this.prisma.listing.findUnique({ 
+  async getById(id: string): Promise<any | null> {
+    const listing = await this.prisma.listing.findUnique({ 
       where: { id },
       include: {
         user: {
@@ -108,6 +138,14 @@ export class ListingsService {
         }
       }
     });
+
+    if (!listing) return null;
+
+    // Transform image URLs to full URLs
+    return {
+      ...listing,
+      images: listing.images?.map((imageKey: string) => this.storage.getPublicUrl(imageKey)) || []
+    };
   }
 
   async create(data: any): Promise<any> {
@@ -147,7 +185,7 @@ export class ListingsService {
   }
 
   async getUserListings(userId: string): Promise<any[]> {
-    return this.prisma.listing.findMany({
+    const listings = await this.prisma.listing.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -161,6 +199,12 @@ export class ListingsService {
         }
       }
     });
+
+    // Transform image URLs to full URLs
+    return listings.map(listing => ({
+      ...listing,
+      images: listing.images?.map((imageKey: string) => this.storage.getPublicUrl(imageKey)) || []
+    }));
   }
 
   async getUserAnalytics(userId: string): Promise<any> {
@@ -170,6 +214,11 @@ export class ListingsService {
         id: true,
         title: true,
         price: true,
+        currency: true,
+        make: true,
+        model: true,
+        year: true,
+        images: true,
         featured: true,
         createdAt: true,
         updatedAt: true,
@@ -223,6 +272,8 @@ export class ListingsService {
         const daysOld = Math.ceil((now.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
         return {
           ...listing,
+          // Transform image URLs to full URLs
+          images: listing.images?.map((imageKey: string) => this.storage.getPublicUrl(imageKey)) || [],
           // Simulate individual listing metrics based on age
           views: Math.min(daysOld * 5, 50),
           inquiries: Math.min(Math.floor(daysOld * 0.5), 5),

@@ -17,6 +17,13 @@ import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import { Header } from '@/components/header'
 
+// Extend Window interface for temp files
+declare global {
+  interface Window {
+    tempFiles?: Map<string, File>;
+  }
+}
+
 export default function SellPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -88,30 +95,20 @@ export default function SellPage() {
     setError('')
 
     try {
-      const uploadPromises = Array.from(files).map(async (file) => {
-        // Get upload URL from backend (using a temporary listing ID for now)
-        const { url, key } = await api.getUploadUrl('temp', file.type)
-        
-        // Upload file to S3/MinIO
-        const uploadResponse = await fetch(url, {
-          method: 'PUT',
-          body: file,
-          headers: {
-            'Content-Type': file.type,
-          },
-        })
-
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to upload image')
-        }
-
-        return key
+      // For now, just store the files locally and upload them after listing creation
+      const fileArray = Array.from(files)
+      const fileKeys = fileArray.map((file, index) => `temp-${Date.now()}-${index}`)
+      
+      // Store files in state for later upload
+      setUploadedImages(prev => [...prev, ...fileKeys])
+      
+      // Store the actual files for later use
+      if (!window.tempFiles) window.tempFiles = new Map()
+      fileArray.forEach((file, index) => {
+        window.tempFiles!.set(fileKeys[index], file)
       })
-
-      const uploadedKeys = await Promise.all(uploadPromises)
-      setUploadedImages(prev => [...prev, ...uploadedKeys])
     } catch (err) {
-      setError('Failed to upload images. Please try again.')
+      setError('Failed to prepare images. Please try again.')
       console.error('Upload error:', err)
     } finally {
       setUploadingImages(false)
@@ -119,6 +116,10 @@ export default function SellPage() {
   }
 
   const removeImage = (index: number) => {
+    const tempKey = uploadedImages[index]
+    if (window.tempFiles && tempKey) {
+      window.tempFiles.delete(tempKey)
+    }
     setUploadedImages(prev => prev.filter((_, i) => i !== index))
   }
 
@@ -138,22 +139,65 @@ export default function SellPage() {
         return
       }
 
-      // Create listing
+      // Create listing first (without images)
       const listingData = {
         title: formData.title || `${formData.year} ${formData.make} ${formData.model}`,
         description: formData.description || `Clean ${formData.year} ${formData.make} ${formData.model} with ${formData.mileage} miles.`,
-        price: parseInt(formData.price) * 100, // Convert to cents
+        price: parseInt(formData.price), // Store as whole dollars
         currency: 'USD',
         make: formData.make,
         model: formData.model,
         year: parseInt(formData.year),
         mileage: parseInt(formData.mileage),
         location: formData.location || 'Not specified',
-        images: uploadedImages,
+        images: [], // Start with empty images array
+        features: formData.features, // Include selected features
+        exterior: formData.exterior || undefined,
+        interior: formData.interior || undefined,
+        transmission: formData.transmission || undefined,
+        fuel: formData.fuel || undefined,
         featured: false,
       }
 
       const listing = await api.createListing(listingData)
+      
+      // Now upload images if any
+      if (uploadedImages.length > 0 && window.tempFiles) {
+        setUploadingImages(true)
+        try {
+          const imageKeys = []
+          for (const tempKey of uploadedImages) {
+            const file = window.tempFiles.get(tempKey)
+            if (file) {
+              // Get upload URL for the real listing
+              const { url, key } = await api.getUploadUrl(listing.id, file.type)
+              
+              // Upload file to S3/MinIO
+              const uploadResponse = await fetch(url, {
+                method: 'PUT',
+                body: file,
+                headers: {
+                  'Content-Type': file.type,
+                },
+              })
+
+              if (uploadResponse.ok) {
+                imageKeys.push(key)
+                // Attach image to listing
+                await api.attachImage(listing.id, key)
+              }
+            }
+          }
+          
+          // Clean up temp files
+          window.tempFiles.clear()
+        } catch (uploadErr) {
+          console.error('Image upload error:', uploadErr)
+          // Don't fail the whole process if image upload fails
+        } finally {
+          setUploadingImages(false)
+        }
+      }
       
       // Redirect to the new listing
       router.push(`/car/${listing.id}`)
@@ -332,8 +376,10 @@ export default function SellPage() {
                             </SelectTrigger>
                             <SelectContent>
                               {[
+                                "Audi",
                                 "BMW",
                                 "Mercedes-Benz",
+                                "Volkswagen",
                                 "Tesla",
                                 "Honda",
                                 "Toyota",
@@ -342,6 +388,29 @@ export default function SellPage() {
                                 "Chevrolet",
                                 "Hyundai",
                                 "Kia",
+                                "Mazda",
+                                "Subaru",
+                                "Lexus",
+                                "Acura",
+                                "Infiniti",
+                                "Genesis",
+                                "Volvo",
+                                "Jaguar",
+                                "Land Rover",
+                                "Porsche",
+                                "Mitsubishi",
+                                "Suzuki",
+                                "Fiat",
+                                "Alfa Romeo",
+                                "Jeep",
+                                "Dodge",
+                                "Chrysler",
+                                "Buick",
+                                "Cadillac",
+                                "Lincoln",
+                                "GMC",
+                                "Ram",
+                                "Other",
                               ].map((make) => (
                                 <SelectItem key={make} value={make}>
                                   {make}
@@ -417,10 +486,13 @@ export default function SellPage() {
                       {/* Uploaded Images */}
                       {uploadedImages.length > 0 && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          {uploadedImages.map((imageKey, index) => (
+                          {uploadedImages.map((imageKey, index) => {
+                            const file = window.tempFiles?.get(imageKey);
+                            const previewUrl = file ? URL.createObjectURL(file) : `/abstract-geometric-shapes.png?height=150&width=200&query=car image ${index + 1}`;
+                            return (
                             <div key={index} className="relative group">
                               <img
-                                src={`/abstract-geometric-shapes.png?height=150&width=200&query=car image ${index + 1}`}
+                                src={previewUrl}
                                 alt={`Upload ${index + 1}`}
                                 className="w-full h-32 object-cover rounded-lg border"
                               />
@@ -433,7 +505,8 @@ export default function SellPage() {
                                 ×
                               </Button>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
 
@@ -601,19 +674,6 @@ export default function SellPage() {
                         </div>
                       </div>
 
-                      <div className="bg-muted/50 rounded-lg p-4">
-                        <h4 className="font-medium mb-2">Market Analysis</h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Similar cars average:</span>
-                            <span className="font-medium">$42,500 - $48,000</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Your price position:</span>
-                            <Badge variant="secondary">Competitive</Badge>
-                          </div>
-                        </div>
-                      </div>
 
                       <div className="bg-accent/10 border border-accent/20 rounded-lg p-4">
                         <div className="flex items-start gap-3">

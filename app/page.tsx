@@ -10,6 +10,7 @@ import Link from "next/link"
 import { useAuth } from '@/lib/auth-context'
 import { api, Listing } from '@/lib/api'
 import { Header } from '@/components/header'
+import Image from 'next/image'
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,15 +52,28 @@ export default function HomePage() {
   };
 
   const formatPrice = (price: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-    }).format(price / 100);
+    if (price >= 10000) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(price);
+    } else {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+        useGrouping: false,
+      }).format(price);
+    }
   };
 
   const getImageUrl = (images: string[], make: string, model: string, year: number) => {
     if (images.length > 0) {
-      return `/abstract-geometric-shapes.png?height=200&width=350&query=${year} ${make} ${model}`;
+      // Use the actual uploaded image URL
+      return images[0];
     }
     return `/abstract-geometric-shapes.png?height=200&width=350&query=${year} ${make} ${model}`;
   };
@@ -165,9 +179,11 @@ export default function HomePage() {
               featuredListings.map((listing) => (
                 <Card key={listing.id} className="overflow-hidden hover:shadow-lg transition-shadow border-accent/20">
                   <div className="relative">
-                    <img 
+                    <Image 
                       src={getImageUrl(listing.images, listing.make, listing.model, listing.year)} 
                       alt={`${listing.year} ${listing.make} ${listing.model}`} 
+                      width={350}
+                      height={200}
                       className="w-full h-48 object-cover" 
                     />
                     <Badge className="absolute top-3 left-3 bg-accent text-accent-foreground">
@@ -256,10 +272,12 @@ export default function HomePage() {
               regularListings.map((listing) => (
                 <Card key={listing.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                   <div className="relative">
-                    <img
-                      src={getImageUrl(listing.images, listing.make, listing.model, listing.year)}
-                      alt={`${listing.year} ${listing.make} ${listing.model}`}
-                      className="w-full h-40 object-cover"
+                    <Image 
+                      src={getImageUrl(listing.images, listing.make, listing.model, listing.year)} 
+                      alt={`${listing.year} ${listing.make} ${listing.model}`} 
+                      width={300}
+                      height={160}
+                      className="w-full h-40 object-cover" 
                     />
                     <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
                       {formatPrice(listing.price, listing.currency)}

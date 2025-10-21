@@ -41,12 +41,32 @@ export class CreateListingDto {
   @IsArray()
   @IsOptional()
   images?: string[];
+
+  @IsArray()
+  @IsOptional()
+  features?: string[];
+
+  @IsString()
+  @IsOptional()
+  exterior?: string;
+
+  @IsString()
+  @IsOptional()
+  interior?: string;
+
+  @IsString()
+  @IsOptional()
+  transmission?: string;
+
+  @IsString()
+  @IsOptional()
+  fuel?: string;
 }
 
 export class UpdateListingDto {
   @IsString()
   @IsOptional()
-  title?: string;
+  title?: string
 
   @IsString()
   @IsOptional()
@@ -87,6 +107,26 @@ export class UpdateListingDto {
   @IsArray()
   @IsOptional()
   images?: string[];
+
+  @IsArray()
+  @IsOptional()
+  features?: string[];
+
+  @IsString()
+  @IsOptional()
+  exterior?: string;
+
+  @IsString()
+  @IsOptional()
+  interior?: string;
+
+  @IsString()
+  @IsOptional()
+  transmission?: string;
+
+  @IsString()
+  @IsOptional()
+  fuel?: string;
 
   @IsBoolean()
   @IsOptional()

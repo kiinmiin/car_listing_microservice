@@ -29,12 +29,16 @@ import { Header } from '@/components/header'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 
 interface DashboardListing {
   id: string;
   title: string;
   price: number;
   currency: string;
+  make: string;
+  model: string;
+  year: number;
   featured: boolean;
   views: number;
   inquiries: number;
@@ -58,6 +62,11 @@ interface DashboardAnalytics {
     id: string;
     title: string;
     price: number;
+    currency: string;
+    make: string;
+    model: string;
+    year: number;
+    images: string[];
     featured: boolean;
     views: number;
     inquiries: number;
@@ -73,6 +82,7 @@ export default function DashboardPage() {
   const [listings, setListings] = useState<DashboardListing[]>([])
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [makingPremium, setMakingPremium] = useState<string | null>(null)
   const [editProfileOpen, setEditProfileOpen] = useState(false)
   const [editEmailOpen, setEditEmailOpen] = useState(false)
@@ -84,6 +94,14 @@ export default function DashboardPage() {
   const [markingAsSold, setMarkingAsSold] = useState<string | null>(null)
   const { user, loading: authLoading, refreshUser } = useAuth()
   const router = useRouter()
+
+  const getImageUrl = (images: string[], make: string, model: string, year: number) => {
+    if (images && images.length > 0) {
+      // Use the actual uploaded image URL
+      return images[0];
+    }
+    return `/abstract-geometric-shapes.png?height=200&width=350&query=${year} ${make} ${model}`;
+  }
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -100,7 +118,10 @@ export default function DashboardPage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('payment') === 'success') {
-      refreshUserData();
+      // Force refresh user data after payment
+      setTimeout(() => {
+        refreshUserData();
+      }, 1000);
       // Clean up URL
       window.history.replaceState({}, document.title, window.location.pathname);
     }
@@ -109,6 +130,7 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
+      setError(null)
       const [listingsData, analyticsData] = await Promise.all([
         api.getUserListings(),
         api.getUserAnalytics()
@@ -131,6 +153,7 @@ export default function DashboardPage() {
       setAnalytics(analyticsData)
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
+      setError('Failed to load dashboard data. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -215,10 +238,22 @@ export default function DashboardPage() {
   }
 
   const formatPrice = (price: number, currency: string = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-    }).format(price)
+    if (price >= 10000) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(price);
+    } else {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+        useGrouping: false,
+      }).format(price);
+    }
   }
 
   const getInitials = (name: string) => {
@@ -231,6 +266,25 @@ export default function DashboardPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <div className="text-destructive mb-4">
+            <svg className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold mb-2">Error Loading Dashboard</h1>
+          <p className="text-muted-foreground mb-6">{error}</p>
+          <Button onClick={fetchDashboardData} className="w-full">
+            Try Again
+          </Button>
         </div>
       </div>
     )
@@ -435,12 +489,11 @@ export default function DashboardPage() {
                   <Card key={listing.id}>
                     <CardContent className="p-6">
                       <div className="flex flex-col md:flex-row gap-6">
-                        <img
-                          src={listing.images.length > 0 
-                            ? `/abstract-geometric-shapes.png?height=120&width=180&query=${listing.title}`
-                            : "/placeholder.jpg"
-                          }
+                        <Image
+                          src={getImageUrl(listing.images, listing.make, listing.model, listing.year)}
                           alt={listing.title}
+                          width={176}
+                          height={128}
                           className="w-full md:w-44 h-32 object-cover rounded-lg"
                         />
                         <div className="flex-1 space-y-3">
@@ -527,7 +580,7 @@ export default function DashboardPage() {
                             </div>
                           </div>
 
-                          {!listing.title.includes('SOLD') && !listing.featured && user?.subscription !== 'premium' && (
+                          {!listing.title.includes('SOLD') && !listing.featured && user?.subscription !== 'premium' && user?.subscription !== 'spotlight' && (
                             <div className="bg-accent/10 border border-accent/20 rounded-lg p-3">
                               <div className="flex items-center justify-between">
                                 <div>
@@ -637,14 +690,16 @@ export default function DashboardPage() {
                     analytics.recentListings.map((listing) => (
                       <div key={listing.id} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex items-center gap-3">
-                          <img
-                            src={`/abstract-geometric-shapes.png?height=40&width=60&query=${listing.title}`}
+                          <Image
+                            src={getImageUrl(listing.images, listing.make, listing.model, listing.year)}
                             alt={listing.title}
+                            width={64}
+                            height={48}
                             className="w-16 h-12 object-cover rounded"
                           />
                           <div>
                             <p className="font-medium">{listing.title}</p>
-                            <p className="text-sm text-muted-foreground">{formatPrice(listing.price)}</p>
+                            <p className="text-sm text-muted-foreground">{formatPrice(listing.price, listing.currency)}</p>
                           </div>
                         </div>
                         <div className="grid grid-cols-3 gap-8 text-center">

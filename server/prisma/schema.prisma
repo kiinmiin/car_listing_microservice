@@ -34,7 +34,12 @@ model Listing {
   mileage     Int
   location    String
   images      String[]
+  features    String[] @default([])
   featured    Boolean  @default(false)
+  exterior    String?  // Color/condition
+  interior    String?  // Color/material
+  transmission String? // Manual, Automatic, CVT, etc.
+  fuel        String?  // Gas, Diesel, Electric, Hybrid, etc.
   user        User     @relation(fields: [userId], references: [id])
   userId      String
   createdAt   DateTime @default(now())

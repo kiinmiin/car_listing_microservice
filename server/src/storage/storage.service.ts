@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadBucketCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
@@ -45,5 +45,10 @@ export class StorageService {
     });
     const url = await getSignedUrl(this.s3, command, { expiresIn: 60 * 5 });
     return { url, key };
+  }
+
+  getPublicUrl(key: string): string {
+    const endpoint = process.env.S3_ENDPOINT ?? 'http://localhost:9000';
+    return `${endpoint}/${this.bucket}/${key}`;
   }
 }

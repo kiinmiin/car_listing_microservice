@@ -18,13 +18,12 @@ import {
   Crown,
   Heart,
   Share2,
-  Grid3X3,
-  List,
 } from "lucide-react"
 import Link from "next/link"
 import { api, Listing } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { Header } from '@/components/header'
+import Image from 'next/image'
 
 export default function BrowsePage() {
   const [listings, setListings] = useState<Listing[]>([]);
@@ -70,8 +69,8 @@ export default function BrowsePage() {
       if (filters.make && filters.make !== 'any') params.make = filters.make;
       if (filters.yearMin && filters.yearMin !== 'any') params.yearMin = parseInt(filters.yearMin);
       if (filters.yearMax && filters.yearMax !== 'any') params.yearMax = parseInt(filters.yearMax);
-      if (filters.priceMin) params.priceMin = parseInt(filters.priceMin) * 100; // Convert to cents
-      if (filters.priceMax) params.priceMax = parseInt(filters.priceMax) * 100; // Convert to cents
+      if (filters.priceMin) params.priceMin = parseInt(filters.priceMin); // Store as whole dollars
+      if (filters.priceMax) params.priceMax = parseInt(filters.priceMax); // Store as whole dollars
       if (filters.featured) params.featured = true;
       if (filters.sort) params.sort = filters.sort;
       
@@ -88,16 +87,28 @@ export default function BrowsePage() {
   };
 
   const formatPrice = (price: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-    }).format(price / 100);
+    if (price >= 10000) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(price);
+    } else {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+        useGrouping: false,
+      }).format(price);
+    }
   };
 
   const getImageUrl = (images: string[], make: string, model: string, year: number) => {
     if (images.length > 0) {
-      // In a real app, you'd construct the proper S3 URL
-      return `/abstract-geometric-shapes.png?height=200&width=350&query=${year} ${make} ${model}`;
+      // Use the actual uploaded image URL
+      return images[0];
     }
     return `/abstract-geometric-shapes.png?height=200&width=350&query=${year} ${make} ${model}`;
   };
@@ -173,11 +184,9 @@ export default function BrowsePage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="any">Any</SelectItem>
-                        <SelectItem value="2020">2020</SelectItem>
-                        <SelectItem value="2021">2021</SelectItem>
-                        <SelectItem value="2022">2022</SelectItem>
-                        <SelectItem value="2023">2023</SelectItem>
-                        <SelectItem value="2024">2024</SelectItem>
+                        {Array.from({ length: 26 }, (_, i) => 2025 - i).map(year => (
+                          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <Select value={filters.yearMax} onValueChange={(value) => setFilters(prev => ({ ...prev, yearMax: value }))}>
@@ -186,11 +195,9 @@ export default function BrowsePage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="any">Any</SelectItem>
-                        <SelectItem value="2020">2020</SelectItem>
-                        <SelectItem value="2021">2021</SelectItem>
-                        <SelectItem value="2022">2022</SelectItem>
-                        <SelectItem value="2023">2023</SelectItem>
-                        <SelectItem value="2024">2024</SelectItem>
+                        {Array.from({ length: 26 }, (_, i) => 2025 - i).map(year => (
+                          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -206,7 +213,7 @@ export default function BrowsePage() {
                     />
                     <label htmlFor="featured" className="text-sm text-foreground cursor-pointer">
                       Premium listings only
-                    </label>
+                        </label>
                   </div>
                 </div>
 
@@ -243,7 +250,7 @@ export default function BrowsePage() {
                    filters.featured ? 'Premium Listings' : 'Browse Cars'}
                 </h1>
                 <p className="text-muted-foreground">
-                  {loading ? 'Loading...' : `Showing ${listings.length} results`}
+                  {loading ? 'Loading...' : `Showing ${activeListings.length} results`}
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -258,14 +265,6 @@ export default function BrowsePage() {
                     <SelectItem value="mileage_asc">Mileage: Lowest First</SelectItem>
                   </SelectContent>
                 </Select>
-                <div className="flex border rounded-lg">
-                  <Button variant="ghost" size="sm" className="border-r">
-                    <Grid3X3 className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <List className="w-4 h-4" />
-                  </Button>
-                </div>
               </div>
             </div>
 
@@ -277,25 +276,26 @@ export default function BrowsePage() {
 
             {/* Premium Listings Banner - only show when not filtering for featured only */}
             {premiumListings.length > 0 && !filters.featured && (
-              <div className="bg-gradient-to-r from-accent/10 to-primary/10 rounded-lg border border-accent/20 p-6 mb-8">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
-                      <Crown className="w-5 h-5 text-accent" />
-                      Premium Listings
-                    </h3>
-                    <p className="text-muted-foreground">
-                      These featured cars get priority placement and 5x more visibility
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="border-accent text-accent hover:bg-accent hover:text-accent-foreground bg-transparent"
-                  >
-                    Learn More
-                  </Button>
+            <div className="bg-gradient-to-r from-accent/10 to-primary/10 rounded-lg border border-accent/20 p-6 mb-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
+                    <Crown className="w-5 h-5 text-accent" />
+                    Premium Listings
+                  </h3>
+                  <p className="text-muted-foreground">
+                    These featured cars get priority placement and 5x more visibility
+                  </p>
                 </div>
+                <Button
+                  variant="outline"
+                  className="border-accent text-accent hover:bg-accent hover:text-accent-foreground bg-transparent"
+                  onClick={() => window.location.href = '/premium'}
+                >
+                  Learn More
+                </Button>
               </div>
+            </div>
             )}
 
             {/* Car Listings Grid */}
@@ -316,45 +316,47 @@ export default function BrowsePage() {
                 ))}
               </div>
             ) : (
-              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {/* All Listings - when featured filter is active, show all in one section */}
                 {filters.featured ? (
                   // Show all listings as premium when filtering for featured only
                   activeListings.map((listing) => (
-                    <Card
+                <Card
                       key={listing.id}
-                      className="overflow-hidden hover:shadow-lg transition-shadow border-accent/20"
-                    >
-                      <div className="relative">
-                        <img
-                          src={getImageUrl(listing.images, listing.make, listing.model, listing.year)}
-                          alt={`${listing.year} ${listing.make} ${listing.model}`}
-                          className="w-full h-48 object-cover"
-                        />
-                        <Badge className="absolute top-3 left-3 bg-accent text-accent-foreground">
-                          <Crown className="w-3 h-3 mr-1" />
-                          Premium
-                        </Badge>
-                        <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
+                  className="overflow-hidden hover:shadow-lg transition-shadow border-accent/20"
+                >
+                  <div className="relative">
+                    <Image 
+                      src={getImageUrl(listing.images, listing.make, listing.model, listing.year)} 
+                      alt={`${listing.year} ${listing.make} ${listing.model}`} 
+                      width={350}
+                      height={200}
+                      className="w-full h-48 object-cover"
+                    />
+                      <Badge className="absolute top-3 left-3 bg-accent text-accent-foreground">
+                        <Crown className="w-3 h-3 mr-1" />
+                        Premium
+                      </Badge>
+                    <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
                           {formatPrice(listing.price, listing.currency)}
-                        </div>
-                      </div>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-lg">
-                          <Link
+                    </div>
+                  </div>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">
+                      <Link
                             href={`/car/${listing.id}`}
-                            className="hover:text-primary transition-colors"
-                          >
+                        className="hover:text-primary transition-colors"
+                      >
                             {listing.year} {listing.make} {listing.model}
-                          </Link>
-                        </CardTitle>
-                        <CardDescription className="flex items-center gap-4 text-sm">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-4 h-4" />
+                      </Link>
+                    </CardTitle>
+                    <CardDescription className="flex items-center gap-4 text-sm">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
                             {listing.year}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Settings className="w-4 h-4" />
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Settings className="w-4 h-4" />
                             {listing.mileage.toLocaleString()} miles
                           </span>
                         </CardDescription>
@@ -386,11 +388,13 @@ export default function BrowsePage() {
                         className="overflow-hidden hover:shadow-lg transition-shadow border-accent/20"
                       >
                         <div className="relative">
-                          <img
-                            src={getImageUrl(listing.images, listing.make, listing.model, listing.year)}
-                            alt={`${listing.year} ${listing.make} ${listing.model}`}
-                            className="w-full h-48 object-cover"
-                          />
+                    <Image 
+                      src={getImageUrl(listing.images, listing.make, listing.model, listing.year)} 
+                      alt={`${listing.year} ${listing.make} ${listing.model}`} 
+                      width={350}
+                      height={200}
+                      className="w-full h-48 object-cover"
+                    />
                           <Badge className="absolute top-3 left-3 bg-accent text-accent-foreground">
                             <Crown className="w-3 h-3 mr-1" />
                             Premium
@@ -412,91 +416,93 @@ export default function BrowsePage() {
                             <span className="flex items-center gap-1">
                               <Calendar className="w-4 h-4" />
                               {listing.year}
-                            </span>
-                            <span className="flex items-center gap-1">
+                      </span>
+                      <span className="flex items-center gap-1">
                               <Settings className="w-4 h-4" />
                               {listing.mileage.toLocaleString()} miles
-                            </span>
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-0">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-1">
-                              <MapPin className="w-4 h-4 text-muted-foreground" />
+                      </span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-1">
+                        <MapPin className="w-4 h-4 text-muted-foreground" />
                               <span className="text-sm text-muted-foreground">{listing.location}</span>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
                             <Link href={`/car/${listing.id}`}>
                               <Button size="sm" className="w-full">
-                                View Details
-                              </Button>
+                        View Details
+                      </Button>
                             </Link>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
 
                     {/* Regular Listings */}
                     {regularListings.map((listing) => (
                       <Card key={listing.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                        <div className="relative">
-                          <img
-                            src={getImageUrl(listing.images, listing.make, listing.model, listing.year)}
-                            alt={`${listing.year} ${listing.make} ${listing.model}`}
-                            className="w-full h-48 object-cover"
-                          />
-                          <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
+                  <div className="relative">
+                    <Image 
+                      src={getImageUrl(listing.images, listing.make, listing.model, listing.year)} 
+                      alt={`${listing.year} ${listing.make} ${listing.model}`} 
+                      width={350}
+                      height={200}
+                      className="w-full h-48 object-cover"
+                    />
+                    <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-sm font-semibold">
                             {formatPrice(listing.price, listing.currency)}
-                          </div>
-                        </div>
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-lg">
-                            <Link
+                    </div>
+                  </div>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">
+                      <Link
                               href={`/car/${listing.id}`}
-                              className="hover:text-primary transition-colors"
-                            >
+                        className="hover:text-primary transition-colors"
+                      >
                               {listing.year} {listing.make} {listing.model}
-                            </Link>
-                          </CardTitle>
-                          <CardDescription className="flex items-center gap-4 text-sm">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-4 h-4" />
+                      </Link>
+                    </CardTitle>
+                    <CardDescription className="flex items-center gap-4 text-sm">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
                               {listing.year}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Settings className="w-4 h-4" />
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Settings className="w-4 h-4" />
                               {listing.mileage.toLocaleString()} miles
-                            </span>
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-0">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-1">
-                              <MapPin className="w-4 h-4 text-muted-foreground" />
+                      </span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-1">
+                        <MapPin className="w-4 h-4 text-muted-foreground" />
                               <span className="text-sm text-muted-foreground">{listing.location}</span>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
                             <Link href={`/car/${listing.id}`}>
                               <Button size="sm" className="w-full">
-                                View Details
-                              </Button>
+                        View Details
+                      </Button>
                             </Link>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
                   </>
                 )}
-              </div>
+            </div>
             )}
 
             {!loading && listings.length === 0 && (
               <div className="text-center py-12">
                 <h3 className="text-lg font-semibold text-foreground mb-2">No cars found</h3>
                 <p className="text-muted-foreground">Try adjusting your filters or search terms</p>
-              </div>
+            </div>
             )}
           </main>
         </div>

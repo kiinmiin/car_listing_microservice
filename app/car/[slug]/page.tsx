@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   MapPin,
   Crown,
-  Heart,
   Share2,
   MessageCircle,
   Shield,
@@ -26,11 +25,15 @@ import { notFound } from "next/navigation"
 import { api, Listing } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { Header } from '@/components/header'
+import Image from 'next/image'
+import Head from 'next/head'
 
 export default function CarDetailPage({ params }: { params: { slug: string } }) {
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [shareCopied, setShareCopied] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -51,18 +54,41 @@ export default function CarDetailPage({ params }: { params: { slug: string } }) 
   };
 
   const formatPrice = (price: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-    }).format(price / 100);
+    if (price >= 10000) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(price);
+    } else {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+        useGrouping: false,
+      }).format(price);
+    }
   };
 
-  const getImageUrl = (images: string[], make: string, model: string, year: number) => {
-    if (images.length > 0) {
-      // In a real app, you'd construct the proper S3 URL
-      return `/abstract-geometric-shapes.png?height=400&width=700&query=${year} ${make} ${model}`;
+  const getImageUrl = (images: string[], make: string, model: string, year: number, index: number = 0) => {
+    if (images.length > 0 && images[index]) {
+      // Use the actual uploaded image URL
+      return images[index];
     }
     return `/abstract-geometric-shapes.png?height=400&width=700&query=${year} ${make} ${model}`;
+  };
+
+  const handleShare = async () => {
+    try {
+      const url = window.location.href;
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000); // Reset after 2 seconds
+    } catch (err) {
+      console.error('Failed to copy URL:', err);
+    }
   };
 
   if (loading) {
@@ -91,7 +117,24 @@ export default function CarDetailPage({ params }: { params: { slug: string } }) 
     notFound();
   }
 
+  const metaTitle = `${listing.year} ${listing.make} ${listing.model} - ${formatPrice(listing.price, listing.currency)}`
+  const metaDescription = `${listing.title} - ${listing.year} ${listing.make} ${listing.model} with ${listing.mileage.toLocaleString()} miles. Located in ${listing.location}. ${listing.description.substring(0, 150)}...`
+  const metaImage = listing.images.length > 0 ? listing.images[0] : `/abstract-geometric-shapes.png?height=400&width=700&query=${listing.year} ${listing.make} ${listing.model}`
+
   return (
+    <>
+      <Head>
+        <title>{metaTitle}</title>
+        <meta name="description" content={metaDescription} />
+        <meta property="og:title" content={metaTitle} />
+        <meta property="og:description" content={metaDescription} />
+        <meta property="og:image" content={metaImage} />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={metaTitle} />
+        <meta name="twitter:description" content={metaDescription} />
+        <meta name="twitter:image" content={metaImage} />
+      </Head>
     <div className="min-h-screen bg-background">
       <Header currentPage="car" />
 
@@ -144,13 +187,9 @@ export default function CarDetailPage({ params }: { params: { slug: string } }) 
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Button variant="outline" size="sm">
-                  <Heart className="w-4 h-4 mr-2" />
-                  Save
-                </Button>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={handleShare}>
                   <Share2 className="w-4 h-4 mr-2" />
-                  Share
+                  {shareCopied ? 'Copied!' : 'Share'}
                 </Button>
               </div>
             </div>
@@ -158,9 +197,11 @@ export default function CarDetailPage({ params }: { params: { slug: string } }) 
             {/* Image Gallery */}
             <Card className="overflow-hidden">
               <div className="relative">
-                <img
-                  src={getImageUrl(listing.images, listing.make, listing.model, listing.year)}
-                  alt={`${listing.year} ${listing.make} ${listing.model}`}
+                <Image 
+                  src={getImageUrl(listing.images, listing.make, listing.model, listing.year, currentImageIndex)} 
+                  alt={`${listing.year} ${listing.make} ${listing.model}`} 
+                  width={700}
+                  height={400}
                   className="w-full h-96 object-cover"
                 />
                 <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-2 rounded-lg">
@@ -169,12 +210,19 @@ export default function CarDetailPage({ params }: { params: { slug: string } }) 
                 {listing.images.length > 1 && (
                   <div className="absolute bottom-4 left-4 right-4">
                     <div className="flex gap-2 overflow-x-auto">
-                      {listing.images.slice(1, 5).map((image, index) => (
-                        <img
+                      {listing.images.slice(0, 5).map((image, index) => (
+                        <Image
                           key={index}
-                          src={`/abstract-geometric-shapes.png?height=80&width=120&query=${listing.year} ${listing.make} ${listing.model} view ${index + 2}`}
-                          alt={`${listing.make} ${listing.model} view ${index + 2}`}
-                          className="w-20 h-16 object-cover rounded border-2 border-white/50 hover:border-white cursor-pointer transition-colors"
+                          src={image}
+                          alt={`${listing.make} ${listing.model} view ${index + 1}`}
+                          width={80}
+                          height={64}
+                          className={`w-20 h-16 object-cover rounded border-2 cursor-pointer transition-colors ${
+                            currentImageIndex === index 
+                              ? 'border-white' 
+                              : 'border-white/50 hover:border-white'
+                          }`}
+                          onClick={() => setCurrentImageIndex(index)}
                         />
                       ))}
                       {listing.images.length > 5 && (
@@ -259,6 +307,69 @@ export default function CarDetailPage({ params }: { params: { slug: string } }) 
               </TabsContent>
 
               <TabsContent value="features" className="space-y-6">
+                {/* Vehicle Details */}
+                {(listing.fuel || listing.transmission || listing.exterior || listing.interior) && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Car className="w-5 h-5" />
+                        Vehicle Details
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {listing.fuel && (
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-muted-foreground">Fuel Type</p>
+                            <p className="text-sm">{listing.fuel}</p>
+                          </div>
+                        )}
+                        {listing.transmission && (
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-muted-foreground">Transmission</p>
+                            <p className="text-sm">{listing.transmission}</p>
+                          </div>
+                        )}
+                        {listing.exterior && (
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-muted-foreground">Exterior</p>
+                            <p className="text-sm">{listing.exterior}</p>
+                          </div>
+                        )}
+                        {listing.interior && (
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-muted-foreground">Interior</p>
+                            <p className="text-sm">{listing.interior}</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Vehicle Features */}
+                {listing.features && listing.features.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5" />
+                        Vehicle Features & Options
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {listing.features.map((feature, index) => (
+                          <div key={index} className="flex items-center space-x-2 p-2 bg-muted/50 rounded-lg">
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            <span className="text-sm font-medium">{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Vehicle Information */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -409,5 +520,6 @@ export default function CarDetailPage({ params }: { params: { slug: string } }) 
         </div>
       </div>
     </div>
+    </>
   )
 }
