@@ -191,6 +191,11 @@ class ApiClient {
       id: string;
       title: string;
       price: number;
+      currency: string;
+      make: string;
+      model: string;
+      year: number;
+      images: string[];
       featured: boolean;
       views: number;
       inquiries: number;
