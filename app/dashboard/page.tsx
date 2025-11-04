@@ -49,38 +49,15 @@ interface DashboardListing {
   updatedAt: string;
 }
 
-interface DashboardAnalytics {
-  totalViews: number;
-  totalInquiries: number;
-  totalFavorites: number;
-  averageDaysToSell: number;
-  conversionRate: number;
+interface DashboardCounts {
   activeListings: number;
   soldListings: number;
-  premiumListings: number;
-  recentListings: Array<{
-    id: string;
-    title: string;
-    price: number;
-    currency: string;
-    make: string;
-    model: string;
-    year: number;
-    images: string[];
-    featured: boolean;
-    views: number;
-    inquiries: number;
-    favorites: number;
-    daysListed: number;
-    createdAt: string;
-    updatedAt: string;
-  }>;
 }
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("overview")
   const [listings, setListings] = useState<DashboardListing[]>([])
-  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null)
+  const [counts, setCounts] = useState<DashboardCounts>({ activeListings: 0, soldListings: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [makingPremium, setMakingPremium] = useState<string | null>(null)
@@ -131,10 +108,7 @@ export default function DashboardPage() {
     try {
       setLoading(true)
       setError(null)
-      const [listingsData, analyticsData] = await Promise.all([
-        api.getUserListings(),
-        api.getUserAnalytics()
-      ])
+      const listingsData = await api.getUserListings()
       
       // Transform listings data to match DashboardListing interface
       const transformedListings = listingsData.map(listing => {
@@ -150,7 +124,9 @@ export default function DashboardPage() {
       })
       
       setListings(transformedListings)
-      setAnalytics(analyticsData)
+      const activeListings = transformedListings.filter(l => !l.title.includes('SOLD')).length
+      const soldListings = transformedListings.filter(l => l.title.includes('SOLD')).length
+      setCounts({ activeListings, soldListings })
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
       setError('Failed to load dashboard data. Please try again.')
@@ -314,51 +290,23 @@ export default function DashboardPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="listings">My Listings</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             {/* Stats Cards */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Active Listings</CardTitle>
                   <Car className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{analytics?.activeListings || 0}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {analytics?.premiumListings || 0} premium
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Views</CardTitle>
-                  <Eye className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{(analytics?.totalViews || 0).toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground">All time</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Inquiries</CardTitle>
-                  <MessageCircle className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{analytics?.totalInquiries || 0}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {analytics?.conversionRate || 0}% conversion rate
-                  </p>
+                  <div className="text-2xl font-bold">{counts.activeListings}</div>
                 </CardContent>
               </Card>
 
@@ -368,16 +316,13 @@ export default function DashboardPage() {
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{analytics?.soldListings || 0}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Avg. {analytics?.averageDaysToSell || 0} days to sell
-                  </p>
+                  <div className="text-2xl font-bold">{counts.soldListings}</div>
                 </CardContent>
               </Card>
             </div>
 
             {/* Recent Activity */}
-            <div className="grid lg:grid-cols-2 gap-6">
+            <div className="max-w-3xl mx-auto">
               <Card>
                 <CardHeader>
                   <CardTitle>Recent Activity</CardTitle>
@@ -405,55 +350,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Performance Summary</CardTitle>
-                  <CardDescription>How your listings are performing</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {analytics && analytics.activeListings > 0 ? (
-                    <>
-                      <div>
-                        <div className="flex justify-between text-sm mb-2">
-                          <span>Total Views</span>
-                          <span>{analytics.totalViews.toLocaleString()}</span>
-                        </div>
-                        <Progress value={Math.min((analytics.totalViews / 1000) * 100, 100)} className="h-2" />
-                      </div>
-                      <div>
-                        <div className="flex justify-between text-sm mb-2">
-                          <span>Conversion Rate</span>
-                          <span>{analytics.conversionRate}%</span>
-                        </div>
-                        <Progress value={Math.min(analytics.conversionRate * 20, 100)} className="h-2" />
-                      </div>
-                      <div>
-                        <div className="flex justify-between text-sm mb-2">
-                          <span>Active Listings</span>
-                          <span>{analytics.activeListings}</span>
-                        </div>
-                        <Progress value={Math.min((analytics.activeListings / 5) * 100, 100)} className="h-2" />
-                      </div>
-                      <div className="bg-accent/10 border border-accent/20 rounded-lg p-3 mt-4">
-                        <p className="text-sm text-foreground font-medium">
-                          {analytics.conversionRate > 5 ? "Great performance!" : "Getting started!"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {analytics.conversionRate > 5 
-                            ? `Your listings are performing well with ${analytics.conversionRate}% conversion rate`
-                            : "Keep creating quality listings to improve your performance"
-                          }
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-center py-4 text-muted-foreground">
-                      <p className="text-sm">No performance data yet</p>
-                      <p className="text-xs">Create listings to see performance metrics</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              {/* Performance Summary removed per product decision */}
             </div>
           </TabsContent>
 
@@ -556,29 +453,7 @@ export default function DashboardPage() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-3 gap-4 text-center">
-                            <div>
-                              <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground mb-1">
-                                <Eye className="w-4 h-4" />
-                                Views
-                              </div>
-                              <p className="font-semibold">{listing.views.toLocaleString()}</p>
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground mb-1">
-                                <MessageCircle className="w-4 h-4" />
-                                Inquiries
-                              </div>
-                              <p className="font-semibold">{listing.inquiries}</p>
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground mb-1">
-                                <Heart className="w-4 h-4" />
-                                Favorites
-                              </div>
-                              <p className="font-semibold">{listing.favorites}</p>
-                            </div>
-                          </div>
+                          {/* Per-listing analytics removed per product decision */}
 
                           {!listing.title.includes('SOLD') && !listing.featured && user?.subscription !== 'premium' && user?.subscription !== 'spotlight' && (
                             <div className="bg-accent/10 border border-accent/20 rounded-lg p-3">
@@ -630,105 +505,7 @@ export default function DashboardPage() {
             </div>
           </TabsContent>
 
-          {/* Analytics Tab */}
-          <TabsContent value="analytics" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-foreground">Analytics</h2>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Total Views</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-primary mb-2">
-                    {(analytics?.totalViews || 0).toLocaleString()}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <TrendingUp className="w-4 h-4 text-green-500" />
-                    <span className="text-green-600">All time</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Conversion Rate</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-primary mb-2">{analytics?.conversionRate || 0}%</div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <TrendingUp className="w-4 h-4 text-green-500" />
-                    <span className="text-green-600">Inquiry rate</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Avg. Days to Sell</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-primary mb-2">{analytics?.averageDaysToSell || 0}</div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <TrendingUp className="w-4 h-4 text-green-500" />
-                    <span className="text-green-600">Based on {analytics?.soldListings || 0} sales</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Listing Performance</CardTitle>
-                <CardDescription>Detailed breakdown of your listing metrics</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {analytics?.recentListings && analytics.recentListings.length > 0 ? (
-                    analytics.recentListings.map((listing) => (
-                      <div key={listing.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <Image
-                            src={getImageUrl(listing.images, listing.make, listing.model, listing.year)}
-                            alt={listing.title}
-                            width={64}
-                            height={48}
-                            className="w-16 h-12 object-cover rounded"
-                          />
-                          <div>
-                            <p className="font-medium">{listing.title}</p>
-                            <p className="text-sm text-muted-foreground">{formatPrice(listing.price, listing.currency)}</p>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-3 gap-8 text-center">
-                          <div>
-                            <p className="text-sm font-medium">{listing.views}</p>
-                            <p className="text-xs text-muted-foreground">Views</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">{listing.inquiries}</p>
-                            <p className="text-xs text-muted-foreground">Inquiries</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">
-                              {listing.views > 0 ? ((listing.inquiries / listing.views) * 100).toFixed(1) : 0}%
-                            </p>
-                            <p className="text-xs text-muted-foreground">Rate</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No listing data available yet
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+          {/* Analytics Tab removed */}
 
           {/* Profile Tab */}
           <TabsContent value="profile" className="space-y-6">

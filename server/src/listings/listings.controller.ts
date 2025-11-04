@@ -18,6 +18,8 @@ export class ListingsController {
     @Query('priceMax') priceMax?: string,
     @Query('q') q?: string,
     @Query('featured') featured?: string,
+    @Query('fuel') fuel?: string,
+    @Query('transmission') transmission?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('sort') sort?: 'newest' | 'price_asc' | 'price_desc' | 'mileage_asc',
@@ -32,6 +34,8 @@ export class ListingsController {
       priceMax: priceMax ? Number(priceMax) : undefined,
       q,
       featured: featured !== undefined ? featured === 'true' : undefined,
+      fuel,
+      transmission,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       sort,
@@ -94,12 +98,7 @@ export class ListingsController {
     return this.listings.getUserListings(userId);
   }
 
-  @UseGuards(AuthGuard('jwt'))
-  @Get('user/analytics')
-  async getUserAnalytics(@Req() req: Request): Promise<any> {
-    const userId = (req as any).user?.userId as string;
-    return this.listings.getUserAnalytics(userId);
-  }
+  
 
   @UseGuards(AuthGuard('jwt'))
   @Post(':id/make-premium')

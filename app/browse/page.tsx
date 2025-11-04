@@ -36,6 +36,8 @@ export default function BrowsePage() {
     yearMax: 'any',
     priceMin: '',
     priceMax: '',
+    fuel: 'any',
+    transmission: 'any',
     featured: false,
     sort: 'newest' as const,
   });
@@ -72,6 +74,8 @@ export default function BrowsePage() {
       if (filters.priceMin) params.priceMin = parseInt(filters.priceMin); // Store as whole dollars
       if (filters.priceMax) params.priceMax = parseInt(filters.priceMax); // Store as whole dollars
       if (filters.featured) params.featured = true;
+      if (filters.fuel && filters.fuel !== 'any') params.fuel = filters.fuel;
+      if (filters.transmission && filters.transmission !== 'any') params.transmission = filters.transmission;
       if (filters.sort) params.sort = filters.sort;
       
       params.limit = 20;
@@ -203,7 +207,40 @@ export default function BrowsePage() {
                   </div>
                 </div>
 
-                {/* Featured Only */}
+                {/* Fuel Type */}
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Fuel</label>
+                  <Select value={filters.fuel} onValueChange={(value) => setFilters(prev => ({ ...prev, fuel: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Any" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      <SelectItem value="Gas">Gas</SelectItem>
+                      <SelectItem value="Diesel">Diesel</SelectItem>
+                      <SelectItem value="Electric">Electric</SelectItem>
+                      <SelectItem value="Hybrid">Hybrid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Transmission */}
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Transmission</label>
+                  <Select value={filters.transmission} onValueChange={(value) => setFilters(prev => ({ ...prev, transmission: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Any" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      <SelectItem value="Manual">Manual</SelectItem>
+                      <SelectItem value="Automatic">Automatic</SelectItem>
+                      <SelectItem value="CVT">CVT</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Featured Only (moved under Transmission) */}
                 <div>
                   <div className="flex items-center space-x-2">
                     <Checkbox 
@@ -213,7 +250,7 @@ export default function BrowsePage() {
                     />
                     <label htmlFor="featured" className="text-sm text-foreground cursor-pointer">
                       Premium listings only
-                        </label>
+                    </label>
                   </div>
                 </div>
 
@@ -230,6 +267,8 @@ export default function BrowsePage() {
                     yearMax: 'any',
                     priceMin: '',
                     priceMax: '',
+                    fuel: 'any',
+                    transmission: 'any',
                     featured: false,
                     sort: 'newest',
                   })}

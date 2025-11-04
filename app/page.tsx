@@ -1,55 +1,41 @@
-'use client';
+'use server';
 
-import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Search, MapPin, Calendar, Fuel, Settings, Crown } from "lucide-react"
 import Link from "next/link"
-import { useAuth } from '@/lib/auth-context'
-import { api, Listing } from '@/lib/api'
 import { Header } from '@/components/header'
 import Image from 'next/image'
 
-export default function HomePage() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
-  const [regularListings, setRegularListings] = useState<Listing[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+type Listing = {
+  id: string;
+  title: string;
+  price: number;
+  currency: string;
+  make: string;
+  model: string;
+  year: number;
+  mileage: number;
+  location: string;
+  images: string[];
+};
 
-  useEffect(() => {
-    fetchListings();
-  }, []);
+async function getHomepageData(): Promise<{ featured: Listing[]; regular: Listing[] }> {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+  const [regularRes, featuredRes] = await Promise.all([
+    fetch(`${base}/listings?featured=false&limit=10`, { next: { revalidate: 60 } }),
+    fetch(`${base}/listings?featured=true&limit=3`, { next: { revalidate: 60 } }),
+  ]);
+  const [regularJson, featuredJson] = await Promise.all([regularRes.json(), featuredRes.json()]);
+  const activeFeatured = (featuredJson.items || []).filter((l: any) => !l.title?.includes('SOLD'));
+  const activeRegular = (regularJson.items || []).filter((l: any) => !l.title?.includes('SOLD'));
+  return { featured: activeFeatured, regular: activeRegular.slice(0, 4) };
+}
 
-  const fetchListings = async () => {
-    try {
-      const [featuredResponse, regularResponse] = await Promise.all([
-        api.getListings({ featured: true, limit: 3 }),
-        api.getListings({ featured: false, limit: 10 }) // Get more to filter out sold ones
-      ]);
-      
-      // Filter out sold listings
-      const activeFeatured = featuredResponse.items.filter(listing => !listing.title.includes('SOLD'));
-      const activeRegular = regularResponse.items.filter(listing => !listing.title.includes('SOLD'));
-      
-      setFeaturedListings(activeFeatured);
-      setRegularListings(activeRegular.slice(0, 4)); // Take first 4 active regular listings
-    } catch (error) {
-      console.error('Error fetching listings:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSearch = () => {
-    if (searchQuery.trim()) {
-      window.location.href = `/browse?q=${encodeURIComponent(searchQuery)}`;
-    } else {
-      window.location.href = '/browse';
-    }
-  };
+export default async function HomePage() {
+  const { featured: featuredListings, regular: regularListings } = await getHomepageData();
 
   const formatPrice = (price: number, currency: string) => {
     if (price >= 10000) {
@@ -95,18 +81,12 @@ export default function HomePage() {
               more visibility.
             </p>
 
-            {/* Search Bar */}
+            {/* Search Bar (no client state; simple GET form) */}
             <div className="max-w-2xl mx-auto mb-12">
-              <div className="flex flex-col md:flex-row gap-3 p-2 bg-card rounded-lg border shadow-lg">
+              <form className="flex flex-col md:flex-row gap-3 p-2 bg-card rounded-lg border shadow-lg" action="/browse" method="get">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                  <Input
-                    placeholder="Search by make, model, or keyword..."
-                    className="pl-10 border-0 bg-transparent focus-visible:ring-0"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                  />
+                  <Input name="q" placeholder="Search by make, model, or keyword..." className="pl-10 border-0 bg-transparent focus-visible:ring-0" />
                 </div>
                 <div className="flex gap-2">
                   <Link href="/browse">
@@ -114,11 +94,11 @@ export default function HomePage() {
                       Filters
                     </Button>
                   </Link>
-                  <Button size="sm" className="px-8" onClick={handleSearch}>
+                  <Button size="sm" className="px-8" type="submit">
                     Search
                   </Button>
                 </div>
-              </div>
+              </form>
             </div>
 
             {/* Quick Stats */}
@@ -161,21 +141,7 @@ export default function HomePage() {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {loading ? (
-              // Loading skeleton
-              [...Array(3)].map((_, i) => (
-                <Card key={i} className="overflow-hidden">
-                  <div className="h-48 bg-muted animate-pulse" />
-                  <CardHeader>
-                    <div className="h-4 bg-muted rounded animate-pulse" />
-                    <div className="h-3 bg-muted rounded animate-pulse w-2/3" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-3 bg-muted rounded animate-pulse" />
-                  </CardContent>
-                </Card>
-              ))
-            ) : featuredListings.length > 0 ? (
+            {featuredListings.length > 0 ? (
               featuredListings.map((listing) => (
                 <Card key={listing.id} className="overflow-hidden hover:shadow-lg transition-shadow border-accent/20">
                   <div className="relative">
@@ -254,21 +220,7 @@ export default function HomePage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Regular Car Cards */}
-            {loading ? (
-              // Loading skeleton
-              [...Array(4)].map((_, index) => (
-                <Card key={index} className="overflow-hidden">
-                  <div className="w-full h-40 bg-muted animate-pulse" />
-                  <CardHeader className="pb-2">
-                    <div className="h-4 bg-muted rounded animate-pulse mb-2" />
-                    <div className="h-3 bg-muted rounded animate-pulse w-3/4" />
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
-                  </CardContent>
-                </Card>
-              ))
-            ) : regularListings.length > 0 ? (
+            {regularListings.length > 0 ? (
               regularListings.map((listing) => (
                 <Card key={listing.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                   <div className="relative">

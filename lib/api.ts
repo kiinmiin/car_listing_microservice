@@ -111,6 +111,8 @@ class ApiClient {
     priceMax?: number;
     q?: string;
     featured?: boolean;
+    fuel?: string;
+    transmission?: string;
     page?: number;
     limit?: number;
     sort?: 'newest' | 'price_asc' | 'price_desc' | 'mileage_asc';
@@ -176,36 +178,6 @@ class ApiClient {
   // Dashboard endpoints
   async getUserListings(): Promise<Listing[]> {
     return this.request<Listing[]>('/listings/user/my-listings');
-  }
-
-  async getUserAnalytics(): Promise<{
-    totalViews: number;
-    totalInquiries: number;
-    totalFavorites: number;
-    averageDaysToSell: number;
-    conversionRate: number;
-    activeListings: number;
-    soldListings: number;
-    premiumListings: number;
-    recentListings: Array<{
-      id: string;
-      title: string;
-      price: number;
-      currency: string;
-      make: string;
-      model: string;
-      year: number;
-      images: string[];
-      featured: boolean;
-      views: number;
-      inquiries: number;
-      favorites: number;
-      daysListed: number;
-      createdAt: string;
-      updatedAt: string;
-    }>;
-  }> {
-    return this.request('/listings/user/analytics');
   }
 
   async makePremium(listingId: string): Promise<Listing> {

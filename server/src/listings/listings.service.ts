@@ -11,6 +11,8 @@ export type ListingsQuery = {
   priceMax?: number;
   q?: string;
   featured?: boolean;
+  fuel?: string;
+  transmission?: string;
   page?: number;
   limit?: number;
   sort?: 'newest' | 'price_asc' | 'price_desc' | 'mileage_asc';
@@ -25,6 +27,8 @@ export class ListingsService {
     if (query.make) where.make = { equals: query.make, mode: 'insensitive' };
     if (query.model) where.model = { equals: query.model, mode: 'insensitive' };
     if (query.featured !== undefined) where.featured = query.featured;
+    if (query.fuel) where.fuel = { equals: query.fuel, mode: 'insensitive' };
+    if (query.transmission) where.transmission = { equals: query.transmission, mode: 'insensitive' };
 
     if (query.yearMin || query.yearMax) {
       where.year = {};
@@ -207,82 +211,7 @@ export class ListingsService {
     }));
   }
 
-  async getUserAnalytics(userId: string): Promise<any> {
-    const listings = await this.prisma.listing.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        title: true,
-        price: true,
-        currency: true,
-        make: true,
-        model: true,
-        year: true,
-        images: true,
-        featured: true,
-        createdAt: true,
-        updatedAt: true,
-        // Note: In a real app, you'd have view/inquiry tracking tables
-        // For now, we'll simulate some data
-      }
-    });
-
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    
-    const activeListings = listings.filter(l => !l.title.includes('SOLD'));
-    const soldListings = listings.filter(l => l.title.includes('SOLD'));
-    
-    // Note: In a real app, these would come from tracking tables
-    // For now, we'll provide minimal simulated data based on listing age
-    const totalViews = activeListings.reduce((acc, listing) => {
-      const daysOld = Math.ceil((now.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-      return acc + Math.min(daysOld * 5, 50); // 5 views per day, max 50
-    }, 0);
-    
-    const totalInquiries = activeListings.reduce((acc, listing) => {
-      const daysOld = Math.ceil((now.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-      return acc + Math.min(daysOld * 0.5, 5); // 0.5 inquiries per day, max 5
-    }, 0);
-    
-    const totalFavorites = activeListings.reduce((acc, listing) => {
-      const daysOld = Math.ceil((now.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-      return acc + Math.min(daysOld * 1, 10); // 1 favorite per day, max 10
-    }, 0);
-    
-    const averageDaysToSell = soldListings.length > 0 
-      ? Math.round(soldListings.reduce((acc, listing) => {
-          const daysDiff = Math.ceil((listing.updatedAt.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-          return acc + daysDiff;
-        }, 0) / soldListings.length)
-      : 0;
-
-    const conversionRate = totalViews > 0 ? (totalInquiries / totalViews) * 100 : 0;
-
-    return {
-      totalViews,
-      totalInquiries,
-      totalFavorites,
-      averageDaysToSell,
-      conversionRate: Math.round(conversionRate * 10) / 10,
-      activeListings: activeListings.length,
-      soldListings: soldListings.length,
-      premiumListings: listings.filter(l => l.featured).length,
-      recentListings: listings.slice(0, 5).map(listing => {
-        const daysOld = Math.ceil((now.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-        return {
-          ...listing,
-          // Transform image URLs to full URLs
-          images: listing.images?.map((imageKey: string) => this.storage.getPublicUrl(imageKey)) || [],
-          // Simulate individual listing metrics based on age
-          views: Math.min(daysOld * 5, 50),
-          inquiries: Math.min(Math.floor(daysOld * 0.5), 5),
-          favorites: Math.min(daysOld, 10),
-          daysListed: daysOld
-        };
-      })
-    };
-  }
+  // getUserAnalytics removed per product decision
 
   async makePremium(listingId: string, userId: string): Promise<any> {
     // First, check if the user has premium credits remaining

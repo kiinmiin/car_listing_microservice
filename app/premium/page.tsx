@@ -71,7 +71,7 @@ export default function PremiumPage() {
         "5x more visibility",
         "Premium badge",
         "Enhanced contact options",
-        "Listing analytics",
+        "Priority support",
       ],
       popular: true,
       color: "border-accent",
@@ -89,7 +89,7 @@ export default function PremiumPage() {
         "10x more visibility",
         "Spotlight badge",
         "Direct phone display",
-        "Advanced analytics",
+        "Social media promotion",
         "Social media promotion",
         "Dedicated support",
       ],
@@ -351,7 +351,7 @@ export default function PremiumPage() {
                           ["Search priority", "Standard", "High", "Highest"],
                           ["Featured placement", "❌", "✅", "✅"],
                           ["Homepage featured", "❌", "❌", "✅"],
-                          ["Analytics", "❌", "Basic", "Advanced"],
+                          ["Premium badge", "❌", "✅", "✅"],
                           ["Premium badge", "❌", "✅", "✅"],
                           ["Social promotion", "❌", "❌", "✅"],
                         ].map(([feature, basic, premium, spotlight], index) => (
@@ -538,7 +538,7 @@ export default function PremiumPage() {
                     <ul className="text-sm mt-1 space-y-1">
                       <li>• Featured placement at top of listings</li>
                       <li>• 5x more visibility in search results</li>
-                      <li>• Advanced analytics dashboard</li>
+                        <li>• Premium badge and priority visibility</li>
                       <li>• Priority customer support</li>
                     </ul>
                   </div>
@@ -589,11 +589,11 @@ export default function PremiumPage() {
                     <li>• Your listings will return to standard placement</li>
                     {pendingAction?.planId === 'premium' ? (
                       <>
-                        <li>• You'll lose access to advanced analytics and homepage carousel features</li>
                         <li>• You'll have 5 premium listings instead of 10</li>
+                        <li>• Featured placement and visibility will reduce</li>
                       </>
                     ) : (
-                      <li>• You'll lose access to advanced analytics</li>
+                      <li>• Featured placement and visibility will reduce</li>
                     )}
                     <li>• You can upgrade again at any time</li>
                   </ul>
