@@ -108,9 +108,6 @@ pnpm dev        # starts Next.js at http://localhost:3000
 ## Contributing
 Pull requests welcome! For major changes, please open an issue first to discuss your ideas.
 
-## License
-MIT – see [LICENSE](LICENSE)
-
 ---
 
 ## Attribution
