@@ -26,7 +26,21 @@ export class ListingsService {
     const where: any = {};
     if (query.make) where.make = { equals: query.make, mode: 'insensitive' };
     if (query.model) where.model = { equals: query.model, mode: 'insensitive' };
-    if (query.featured !== undefined) where.featured = query.featured;
+    if (query.featured !== undefined) {
+      // Only return currently-active featured listings
+      if (query.featured === true) {
+        where.AND = [
+          { featured: true },
+          { OR: [ { featuredUntil: { gt: new Date() } }, { featuredUntil: null } ] }
+        ];
+      } else {
+        // Non-featured
+        where.OR = [
+          { featured: false },
+          { AND: [ { featured: true }, { featuredUntil: { lt: new Date() } } ] }
+        ];
+      }
+    }
     if (query.fuel) where.fuel = { equals: query.fuel, mode: 'insensitive' };
     if (query.transmission) where.transmission = { equals: query.transmission, mode: 'insensitive' };
 
@@ -119,9 +133,11 @@ export class ListingsService {
       this.prisma.listing.count({ where }),
     ]);
 
-    // Transform image URLs to full URLs
+    const now = new Date();
+    // Transform image URLs to full URLs and compute effective featured flag
     const itemsWithImageUrls = items.map(item => ({
       ...item,
+      featured: item.featured && (!item.featuredUntil || item.featuredUntil > now),
       images: item.images?.map((imageKey: string) => this.storage.getPublicUrl(imageKey)) || []
     }));
 
@@ -145,9 +161,11 @@ export class ListingsService {
 
     if (!listing) return null;
 
-    // Transform image URLs to full URLs
+    const now = new Date();
+    // Transform image URLs to full URLs and compute effective featured flag
     return {
       ...listing,
+      featured: listing.featured && (!listing.featuredUntil || listing.featuredUntil > now),
       images: listing.images?.map((imageKey: string) => this.storage.getPublicUrl(imageKey)) || []
     };
   }
@@ -214,10 +232,14 @@ export class ListingsService {
   // getUserAnalytics removed per product decision
 
   async makePremium(listingId: string, userId: string): Promise<any> {
-    // First, check if the user has premium credits remaining
+    // First, check if the user has premium credits remaining and get subscription info
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { premiumListingsRemaining: true }
+      select: { 
+        premiumListingsRemaining: true,
+        subscription: true,
+        subscriptionExpiresAt: true
+      }
     });
 
     if (!user) {
@@ -244,12 +266,26 @@ export class ListingsService {
       throw new Error('Listing is already premium');
     }
 
+    // Determine expiry for the premium listing
+    const now = new Date();
+    let featuredUntil: Date | null = null;
+    if (user.subscriptionExpiresAt && user.subscriptionExpiresAt > now) {
+      featuredUntil = user.subscriptionExpiresAt;
+    } else if (user.subscription === 'spotlight') {
+      featuredUntil = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    } else if (user.subscription === 'premium') {
+      featuredUntil = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+    }
+
     // Use a transaction to update both the listing and user
     return await this.prisma.$transaction(async (tx) => {
-      // Update the listing to be featured
+      // Update the listing to be featured with expiry
       const updatedListing = await tx.listing.update({
         where: { id: listingId },
-        data: { featured: true },
+        data: { 
+          featured: true,
+          featuredUntil: featuredUntil ?? new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000) // default 60 days
+        },
         include: {
           user: {
             select: {

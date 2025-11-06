@@ -14,6 +14,7 @@ export interface Listing {
   images: string[];
   features: string[];
   featured: boolean;
+  featuredUntil?: string;
   exterior?: string;
   interior?: string;
   transmission?: string;

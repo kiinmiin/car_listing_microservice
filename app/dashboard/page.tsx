@@ -40,6 +40,7 @@ interface DashboardListing {
   model: string;
   year: number;
   featured: boolean;
+  featuredUntil?: string;
   views: number;
   inquiries: number;
   favorites: number;
@@ -71,6 +72,7 @@ export default function DashboardPage() {
   const [markingAsSold, setMarkingAsSold] = useState<string | null>(null)
   const { user, loading: authLoading, refreshUser } = useAuth()
   const router = useRouter()
+  const hasTimeRemaining = (user?.daysRemaining ?? 0) > 0
 
   const getImageUrl = (images: string[], make: string, model: string, year: number) => {
     if (images && images.length > 0) {
@@ -399,10 +401,17 @@ export default function DashboardPage() {
                               <div className="flex items-center gap-2 mb-1">
                                 <h3 className="text-lg font-semibold">{listing.title}</h3>
                                 {listing.featured && (
-                                  <Badge className="bg-accent text-accent-foreground">
-                                    <Crown className="w-3 h-3 mr-1" />
-                                    Premium
-                                  </Badge>
+                                  <div className="flex items-center gap-2">
+                                    <Badge className="bg-accent text-accent-foreground">
+                                      <Crown className="w-3 h-3 mr-1" />
+                                      Premium
+                                    </Badge>
+                                    {listing.featuredUntil && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {Math.max(0, Math.ceil((new Date(listing.featuredUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days left
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                                 <Badge
                                   variant={listing.title.includes('SOLD') ? "secondary" : "default"}
@@ -455,28 +464,32 @@ export default function DashboardPage() {
 
                           {/* Per-listing analytics removed per product decision */}
 
-                          {!listing.title.includes('SOLD') && !listing.featured && user?.subscription !== 'premium' && user?.subscription !== 'spotlight' && (
+                          {!listing.title.includes('SOLD') && !listing.featured && user?.premiumListingsRemaining === 0 && (
                             <div className="bg-accent/10 border border-accent/20 rounded-lg p-3">
                               <div className="flex items-center justify-between">
                                 <div>
                                   <p className="text-sm font-medium">Boost your listing</p>
-                                  <p className="text-xs text-muted-foreground">Get 5x more views with Premium</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {hasTimeRemaining ? 'No premium credits remaining in the current period' : 'Get 5x more views with Premium'}
+                                  </p>
                                 </div>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="border-accent text-accent hover:bg-accent hover:text-accent-foreground bg-transparent"
-                                  asChild
-                                >
-                                  <Link href="/premium">
-                                    Upgrade
-                                  </Link>
-                                </Button>
+                                {!hasTimeRemaining && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-accent text-accent hover:bg-accent hover:text-accent-foreground bg-transparent"
+                                    asChild
+                                  >
+                                    <Link href="/premium">
+                                      Upgrade
+                                    </Link>
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           )}
                           
-                          {!listing.title.includes('SOLD') && !listing.featured && (user?.subscription === 'premium' || user?.subscription === 'spotlight') && (
+                          {!listing.title.includes('SOLD') && !listing.featured && (user?.premiumListingsRemaining ?? 0) > 0 && (
                             <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
                               <div className="flex items-center justify-between">
                                 <div>
@@ -490,8 +503,7 @@ export default function DashboardPage() {
                                   disabled={user?.premiumListingsRemaining === 0 || makingPremium === listing.id}
                                   onClick={() => handleMakePremium(listing.id)}
                                 >
-                                  {makingPremium === listing.id ? 'Processing...' : 
-                                   user?.premiumListingsRemaining === 0 ? 'No Credits' : 'Make Premium'}
+                                  {makingPremium === listing.id ? 'Processing...' : 'Make Premium'}
                                 </Button>
                               </div>
                             </div>
@@ -524,6 +536,29 @@ export default function DashboardPage() {
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <span className="text-sm font-medium">Verified Seller</span>
                   </div>
+
+                  <div className="rounded-lg border p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Crown className="w-4 h-4 text-accent" />
+                      <span className="text-sm font-semibold">Subscription</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {hasTimeRemaining && user.subscription === 'free' ? 'Premium active until period end' : (user.subscription === 'spotlight' ? 'Spotlight' : user.subscription.charAt(0).toUpperCase() + user.subscription.slice(1))}
+                    </p>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded bg-muted p-2">
+                        <div className="text-muted-foreground">Credits left</div>
+                        <div className="font-medium">{user.premiumListingsRemaining}</div>
+                      </div>
+                      {user.daysRemaining !== undefined && (
+                        <div className="rounded bg-muted p-2">
+                          <div className="text-muted-foreground">Days remaining</div>
+                          <div className="font-medium">{user.daysRemaining}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <Button className="w-full bg-transparent" variant="outline" onClick={handleEditProfile}>
                     <Edit className="w-4 h-4 mr-2" />
                     Edit Profile

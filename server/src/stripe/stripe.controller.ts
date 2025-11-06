@@ -15,6 +15,26 @@ export class StripeController {
     const priceCents = body.priceCents ?? 999; // $9.99 default
     const currency = body.currency ?? 'usd';
 
+    // Prevent duplicate subscription purchases if user already has time remaining
+    if (body.listingId?.includes('premium-upgrade')) {
+      const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { subscription: true, subscriptionExpiresAt: true } });
+      const now = new Date();
+      const hasTimeRemaining = !!(user?.subscriptionExpiresAt && user.subscriptionExpiresAt > now);
+      const isPremiumPurchase = (body.priceCents ?? 0) >= 2999 && (body.priceCents ?? 0) < 4999;
+      const isSpotlightPurchase = (body.priceCents ?? 0) >= 4999;
+
+      if (hasTimeRemaining) {
+        // Allow upgrade from premium -> spotlight only
+        if (isSpotlightPurchase && user?.subscription === 'premium') {
+          // allowed
+        } else {
+          throw new Error('You already have an active subscription until the end of your current period.');
+        }
+      } else {
+        // No time remaining: allow both purchases
+      }
+    }
+
     const successUrl = process.env.CORS_ORIGIN ? `${process.env.CORS_ORIGIN}/premium/success?amount=${priceCents}` : `http://localhost:3000/premium/success?amount=${priceCents}`;
     const cancelUrl = process.env.CORS_ORIGIN ? `${process.env.CORS_ORIGIN}/premium` : 'http://localhost:3000/premium';
 
@@ -95,8 +115,10 @@ export class StripeController {
           const listingId = session?.metadata?.listingId as string | undefined;
           const userId = session?.metadata?.userId as string | undefined;
           
-          if (listingId) {
-            await this.prisma.listing.update({ where: { id: listingId }, data: { featured: true } });
+          if (listingId && !listingId.includes('premium-upgrade')) {
+            const now = new Date();
+            const featuredUntil = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // default 60 days for one-off feature
+            await this.prisma.listing.update({ where: { id: listingId }, data: { featured: true, featuredUntil } });
           }
           
           // Update user subscription if this is a premium upgrade

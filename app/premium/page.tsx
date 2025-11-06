@@ -25,9 +25,10 @@ export default function PremiumPage() {
   const { user, refreshUser } = useAuth()
   const router = useRouter()
 
-  // Check if user already has premium subscription
-  const isPremiumUser = user?.subscription === 'premium' || user?.subscription === 'spotlight'
-  const isFreeUser = user?.subscription === 'free'
+  // Check if user already has premium subscription (or grace period remaining)
+  const hasTimeRemaining = (user?.daysRemaining ?? 0) > 0
+  const isPremiumUser = (user?.subscription === 'premium' || user?.subscription === 'spotlight') || hasTimeRemaining
+  const isFreeUser = user?.subscription === 'free' && !hasTimeRemaining
 
   // Set initial selected plan based on user's current subscription
   React.useEffect(() => {
@@ -104,10 +105,8 @@ export default function PremiumPage() {
       return
     }
 
-    const isPremiumUser = user?.subscription === 'premium' || user?.subscription === 'spotlight'
-    const isCurrentPlan = (user?.subscription === 'premium' && planId === 'premium') || 
-                         (user?.subscription === 'spotlight' && planId === 'spotlight') || 
-                         (!isPremiumUser && planId === 'basic')
+    const isPremiumUserNow = user?.subscription === 'premium' || user?.subscription === 'spotlight'
+    const isCurrentPlan = (isPremiumUserNow && planId === user?.subscription) || (!isPremiumUser && planId === 'basic')
     
     if (isCurrentPlan) {
       return // Don't allow selecting current plan
@@ -219,12 +218,14 @@ export default function PremiumPage() {
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <Crown className="w-5 h-5 text-green-600" />
                     <span className="font-semibold text-green-800 dark:text-green-200">
-                      {user?.subscription === 'spotlight' ? 'Spotlight' : 'Premium'} Member
+                      {(user?.subscription === 'spotlight') ? 'Spotlight' : (user?.subscription === 'premium' ? 'Premium' : 'Premium (active until period end)')} Member
                     </span>
                   </div>
-                  <p className="text-sm text-green-700 dark:text-green-300">
-                    You have {user?.premiumListingsRemaining || 0} premium listings remaining
-                  </p>
+                  {(user?.subscription === 'premium' || user?.subscription === 'spotlight') && (
+                    <p className="text-sm text-green-700 dark:text-green-300">
+                      You have {user?.premiumListingsRemaining || 0} premium listings remaining
+                    </p>
+                  )}
                   {user?.daysRemaining && user.daysRemaining > 0 && (
                     <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                       {user.daysRemaining} days remaining
@@ -393,7 +394,13 @@ export default function PremiumPage() {
                 </div>
               ) : (
                 <>
-                  <Button size="lg" onClick={handleUpgrade} disabled={selectedPlan === "basic" || loading}>
+                  <Button size="lg" onClick={handleUpgrade} disabled={(() => {
+                    if (selectedPlan === "basic" || loading) return true
+                    const current = user?.subscription
+                    const upgradingToHigher = current === 'premium' && selectedPlan === 'spotlight'
+                    if (hasTimeRemaining && !upgradingToHigher) return true
+                    return false
+                  })()}>
                     {loading ? (
                       "Processing..."
                     ) : selectedPlan === "basic" ? (

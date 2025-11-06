@@ -91,34 +91,29 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Determine target subscription and premium listings
-    let targetSubscription: string;
-    let targetPremiumListings: number;
-
+    // Determine target subscription and premium listings behavior
     if (planId === 'basic') {
-      targetSubscription = 'free';
-      targetPremiumListings = 0;
-    } else if (planId === 'premium') {
-      targetSubscription = 'premium';
-      targetPremiumListings = 5;
-    } else {
-      // This should not happen due to validation above, but TypeScript needs this
-      throw new BadRequestException('Invalid plan for downgrade');
+      // Downgrade to free immediately but preserve remaining credits until expiry
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          subscription: 'free',
+          // preserve premiumListingsRemaining as-is
+        }
+      });
     }
 
-    // Check if user is already on the target plan
-    if (user.subscription === targetSubscription) {
-      throw new BadRequestException(`User is already on the ${targetSubscription} plan`);
+    if (planId === 'premium') {
+      // Downgrade from spotlight to premium: cap credits at 5
+      const newCredits = Math.min(user.premiumListingsRemaining || 0, 5);
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          subscription: 'premium',
+          premiumListingsRemaining: newCredits,
+        }
+      });
     }
-
-    // Downgrade to target plan
-    return await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        subscription: targetSubscription,
-        premiumListingsRemaining: targetPremiumListings
-      }
-    });
   }
 
   private async signToken(userId: string): Promise<string> {

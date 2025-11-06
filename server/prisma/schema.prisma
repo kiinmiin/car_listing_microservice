@@ -36,6 +36,7 @@ model Listing {
   images      String[]
   features    String[] @default([])
   featured    Boolean  @default(false)
+  featuredUntil DateTime?
   exterior    String?  // Color/condition
   interior    String?  // Color/material
   transmission String? // Manual, Automatic, CVT, etc.
@@ -47,4 +48,5 @@ model Listing {
 
   @@index([make, model, year])
   @@index([price])
+  @@index([featured])
 }
